@@ -2023,6 +2023,13 @@ ${highRisk.join('\n')}
                 return;
             }
             
+            // Debug: Check first item structure
+            if(data.length > 0) {
+                console.log('Sample data keys:', Object.keys(data[0]));
+                console.log('Sample Diagnosis:', data[0].Diagnosis);
+                console.log('Sample Medication:', data[0].Medication);
+            }
+            
             // Group by child name to count assessments
             const childGroups = {};
             data.forEach(item => {
