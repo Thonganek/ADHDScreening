@@ -895,6 +895,80 @@
                 </div>
             </div>
 
+            <!-- Charts Section -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="card card-custom">
+                        <div class="card-header-custom">
+                            <i class="fas fa-chart-line me-2"></i>กราฟแสดงอายุ (0-12 ปี)
+                        </div>
+                        <div class="card-body">
+                            <canvas id="ageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card card-custom">
+                        <div class="card-header-custom">
+                            <i class="fas fa-chart-bar me-2"></i>กราฟแสดงเพศ
+                        </div>
+                        <div class="card-body">
+                            <canvas id="genderChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Location Tables -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="card card-custom">
+                        <div class="card-header-custom">
+                            <i class="fas fa-map-marker-alt me-2"></i>สถิติตามหมู่บ้าน
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>หมู่ที่</th>
+                                            <th class="text-center">จำนวน</th>
+                                            <th class="text-center">ร้อยละ</th>
+                                            <th class="text-center">เสี่ยง</th>
+                                            <th class="text-center">ปกติ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="villageTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card card-custom">
+                        <div class="card-header-custom">
+                            <i class="fas fa-map-marker-alt me-2"></i>สถิติตามตำบล
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>ตำบล</th>
+                                            <th class="text-center">จำนวน</th>
+                                            <th class="text-center">ร้อยละ</th>
+                                            <th class="text-center">เสี่ยง</th>
+                                            <th class="text-center">ปกติ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="subdistrictTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Login Button (When not logged in) -->
             <div class="text-center mb-4" id="loginPrompt">
                 <div class="alert alert-info d-inline-block" style="border-radius: 20px;">
@@ -910,7 +984,7 @@
             <div class="filter-section" id="filterSection" style="display:none;">
                 <h5 class="mb-3"><i class="fas fa-filter me-2"></i>ค้นหาและกรองข้อมูล</h5>
                 <div class="row g-3">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <input type="text" class="form-control" id="searchName" placeholder="ค้นหาชื่อเด็ก...">
                     </div>
                     <div class="col-md-2">
@@ -930,9 +1004,12 @@
                         </select>
                     </div>
                     <div class="col-md-2">
+                        <input type="text" class="form-control" id="filterSubdistrict" placeholder="ตำบล...">
+                    </div>
+                    <div class="col-md-2">
                         <input type="date" class="form-control" id="filterDate">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <button class="btn btn-primary w-100" onclick="applyFilter()">
                             <i class="fas fa-search me-2"></i>ค้นหา
                         </button>
@@ -941,10 +1018,8 @@
             </div>
 
             <!-- Table Container -->
-            <div class="position-relative" style="min-height: 400px;">
-                
-                <!-- Data Table -->
-                <div id="tableContainer" class="card card-custom p-0" style="display:none;">
+            <div id="tableContainer" style="display:none;">
+                <div class="card card-custom p-0">
                     <div class="p-4">
                         <h5 class="text-primary mb-3">
                             <i class="fas fa-list me-2"></i>รายชื่อผู้เข้ารับการประเมิน
@@ -969,8 +1044,8 @@
                         </div>
                     </div>
                 </div>
-
             </div>
+
         </div>
 
     </div>
@@ -1202,6 +1277,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1xmTQ_hd4n-FPyqIiUqPhAElgMRdYfUo&libraries=places&callback=initMap"></script>
 
     <script type="module">
@@ -1227,9 +1303,19 @@
         let allCases = [];
         let filteredCases = [];
         let isLoggedIn = false;
+        let ageChart = null;
+        let genderChart = null;
+        let mapInitialized = false;
 
         // Map Initialization
         window.initMap = function() {
+            // Don't initialize until called
+            console.log('Google Maps API loaded');
+        }
+
+        function actuallyInitMap() {
+            if(mapInitialized) return;
+            
             const hospitalPos = { lat: 15.73315086491515, lng: 102.79444248459548 };
             
             map = new google.maps.Map(document.getElementById("map"), {
@@ -1278,16 +1364,25 @@
 
             document.getElementById("lat").value = hospitalPos.lat;
             document.getElementById("lng").value = hospitalPos.lng;
+            
+            mapInitialized = true;
         }
 
         window.openMapModal = function() {
             const modal = new bootstrap.Modal(document.getElementById('mapModal'));
             modal.show();
             
-            document.getElementById('mapModal').addEventListener('shown.bs.modal', function () {
-                google.maps.event.trigger(map, 'resize');
-                map.setCenter(marker.getPosition());
-            });
+            // Initialize map when modal opens
+            setTimeout(function() {
+                if(!mapInitialized) {
+                    actuallyInitMap();
+                }
+                // Trigger resize to fix display issues
+                if(map) {
+                    google.maps.event.trigger(map, 'resize');
+                    map.setCenter(marker.getPosition());
+                }
+            }, 500);
         }
 
         window.confirmLocation = function() {
@@ -1587,6 +1682,224 @@ ${highRisk.join('\n')}
                 return apptDate === today;
             });
             document.getElementById('statToday').innerText = todayAppts.length;
+            
+            // Update Charts
+            updateAgeChart(data);
+            updateGenderChart(data);
+            updateLocationTables(data);
+        }
+
+        function updateAgeChart(data) {
+            // Count by age (0-12)
+            const ageCounts = {};
+            const ageRisk = {};
+            const ageNormal = {};
+            
+            for(let i = 0; i <= 12; i++) {
+                ageCounts[i] = 0;
+                ageRisk[i] = 0;
+                ageNormal[i] = 0;
+            }
+            
+            data.forEach(item => {
+                const age = parseInt(item.ChildAge);
+                if(age >= 0 && age <= 12) {
+                    ageCounts[age]++;
+                    if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                        ageRisk[age]++;
+                    } else {
+                        ageNormal[age]++;
+                    }
+                }
+            });
+            
+            const labels = [];
+            const riskData = [];
+            const normalData = [];
+            
+            for(let i = 0; i <= 12; i++) {
+                labels.push(i + ' ปี');
+                riskData.push(ageRisk[i]);
+                normalData.push(ageNormal[i]);
+            }
+            
+            const ctx = document.getElementById('ageChart');
+            
+            if(ageChart) {
+                ageChart.destroy();
+            }
+            
+            ageChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'เสี่ยง',
+                        data: riskData,
+                        borderColor: '#f5576c',
+                        backgroundColor: 'rgba(245, 87, 108, 0.2)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'ปกติ',
+                        data: normalData,
+                        borderColor: '#4facfe',
+                        backgroundColor: 'rgba(79, 172, 254, 0.2)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateGenderChart(data) {
+            const genderCounts = { 'ชาย': 0, 'หญิง': 0 };
+            const genderRisk = { 'ชาย': 0, 'หญิง': 0 };
+            const genderNormal = { 'ชาย': 0, 'หญิง': 0 };
+            
+            data.forEach(item => {
+                const gender = item.ChildGender || 'ไม่ระบุ';
+                if(gender === 'ชาย' || gender === 'หญิง') {
+                    genderCounts[gender]++;
+                    if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                        genderRisk[gender]++;
+                    } else {
+                        genderNormal[gender]++;
+                    }
+                }
+            });
+            
+            const ctx = document.getElementById('genderChart');
+            
+            if(genderChart) {
+                genderChart.destroy();
+            }
+            
+            genderChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['ชาย', 'หญิง'],
+                    datasets: [{
+                        label: 'เสี่ยง',
+                        data: [genderRisk['ชาย'], genderRisk['หญิง']],
+                        backgroundColor: '#f5576c'
+                    }, {
+                        label: 'ปกติ',
+                        data: [genderNormal['ชาย'], genderNormal['หญิง']],
+                        backgroundColor: '#4facfe'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            stacked: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLocationTables(data) {
+            // Village Table
+            const villageStats = {};
+            data.forEach(item => {
+                const village = item.Village || 'ไม่ระบุ';
+                if(!villageStats[village]) {
+                    villageStats[village] = { total: 0, risk: 0, normal: 0 };
+                }
+                villageStats[village].total++;
+                if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                    villageStats[village].risk++;
+                } else {
+                    villageStats[village].normal++;
+                }
+            });
+            
+            const villageTable = document.getElementById('villageTable');
+            villageTable.innerHTML = '';
+            
+            Object.keys(villageStats).sort((a, b) => {
+                const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+                const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+                return numA - numB;
+            }).forEach(village => {
+                const stat = villageStats[village];
+                const percent = ((stat.total / data.length) * 100).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${village}</td>
+                    <td class="text-center"><strong>${stat.total}</strong></td>
+                    <td class="text-center">${percent}%</td>
+                    <td class="text-center"><span class="badge bg-danger">${stat.risk}</span></td>
+                    <td class="text-center"><span class="badge bg-success">${stat.normal}</span></td>
+                `;
+                villageTable.appendChild(tr);
+            });
+            
+            // Subdistrict Table
+            const subdistrictStats = {};
+            data.forEach(item => {
+                const subdistrict = item.SubDistrict || 'ไม่ระบุ';
+                if(!subdistrictStats[subdistrict]) {
+                    subdistrictStats[subdistrict] = { total: 0, risk: 0, normal: 0 };
+                }
+                subdistrictStats[subdistrict].total++;
+                if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                    subdistrictStats[subdistrict].risk++;
+                } else {
+                    subdistrictStats[subdistrict].normal++;
+                }
+            });
+            
+            const subdistrictTable = document.getElementById('subdistrictTable');
+            subdistrictTable.innerHTML = '';
+            
+            Object.keys(subdistrictStats).sort().forEach(subdistrict => {
+                const stat = subdistrictStats[subdistrict];
+                const percent = ((stat.total / data.length) * 100).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${subdistrict}</td>
+                    <td class="text-center"><strong>${stat.total}</strong></td>
+                    <td class="text-center">${percent}%</td>
+                    <td class="text-center"><span class="badge bg-danger">${stat.risk}</span></td>
+                    <td class="text-center"><span class="badge bg-success">${stat.normal}</span></td>
+                `;
+                subdistrictTable.appendChild(tr);
+            });
         }
 
         function renderTable(data) {
@@ -1686,6 +1999,7 @@ ${highRisk.join('\n')}
             const searchName = document.getElementById('searchName').value.toLowerCase();
             const filterRisk = document.getElementById('filterRisk').value;
             const filterEvaluator = document.getElementById('filterEvaluator').value;
+            const filterSubdistrict = document.getElementById('filterSubdistrict').value.toLowerCase();
             const filterDate = document.getElementById('filterDate').value;
             
             filteredCases = allCases.filter(item => {
@@ -1700,6 +2014,10 @@ ${highRisk.join('\n')}
                 }
                 
                 if(filterEvaluator && item.EvaluatorType !== filterEvaluator) {
+                    match = false;
+                }
+                
+                if(filterSubdistrict && !item.SubDistrict.toLowerCase().includes(filterSubdistrict)) {
                     match = false;
                 }
                 
