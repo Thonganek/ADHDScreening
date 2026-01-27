@@ -817,6 +817,47 @@
                     </div>
                 </div>
 
+                <!-- Diagnosis and Medication Section -->
+                <div class="card card-custom mb-4 animate-slide-up">
+                    <div class="card-header-custom">
+                        <i class="fas fa-stethoscope me-2"></i>ข้อมูลการตรวจวินิจฉัยและการรักษา
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning border-0 mb-3" style="border-radius: 15px;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <small><strong>หมายเหตุ:</strong> กรอกเฉพาะกรณีที่มีการวินิจฉัยจากแพทย์และได้รับยาแล้วเท่านั้น</small>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-notes-medical text-primary me-1"></i>การวินิจฉัย
+                                </label>
+                                <textarea class="form-control" id="diagnosis" rows="3" 
+                                          placeholder="ระบุผลการวินิจฉัยจากแพทย์ (ถ้ามี)&#10;เช่น ADHD Combined Type, ADHD Inattentive Type, ADHD Hyperactive-Impulsive Type"></textarea>
+                                <small class="text-muted">ข้อมูลจากแพทย์เท่านั้น</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-pills text-success me-1"></i>ยาที่จ่าย
+                                </label>
+                                <textarea class="form-control" id="medication" rows="3" 
+                                          placeholder="ระบุชื่อยาและขนาด (ถ้ามี)&#10;เช่น Methylphenidate 10 mg วันละ 2 ครั้ง&#10;Atomoxetine 25 mg วันละ 1 ครั้ง"></textarea>
+                                <small class="text-muted">ระบุรายละเอียดยาที่ได้รับ</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-calendar-alt text-info me-1"></i>วันที่จ่ายยา
+                                </label>
+                                <input type="date" class="form-control" id="medicationDate">
+                                <small class="text-muted">ระบุวันที่เริ่มได้รับยา</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- คำแนะนำการประเมิน -->
                 <div class="alert alert-info border-0 shadow-sm animate-slide-up" style="border-radius: 20px;">
                     <div class="d-flex align-items-center">
@@ -1508,6 +1549,9 @@ ${highRisk.join('\n')}
                     province: document.getElementById('province').value,
                     lat: document.getElementById('lat').value,
                     lng: document.getElementById('lng').value,
+                    diagnosis: document.getElementById('diagnosis').value || '',
+                    medication: document.getElementById('medication').value || '',
+                    medicationDate: document.getElementById('medicationDate').value || '',
                     ...answers,
                     scoreInattention: s1,
                     scoreHyperactivity: s2,
@@ -2029,6 +2073,11 @@ ${highRisk.join('\n')}
                         <span class="badge badge-custom ${latest.AssessmentResult.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'}">
                             ${latest.AssessmentResult}
                         </span>
+                        ${latest.Diagnosis && String(latest.Diagnosis).trim() ? `
+                            <br><small class="text-primary mt-1 d-block">
+                                <i class="fas fa-stethoscope me-1"></i>วินิจฉัย: ${latest.Diagnosis}
+                            </small>
+                        ` : ''}
                     </td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary rounded-pill" onclick='showHistory(${JSON.stringify(childName)})'>
@@ -2065,6 +2114,19 @@ ${highRisk.join('\n')}
                                     <span class="text-dark">${latest.LineID}</span>
                                 </div>
                             ` : '<small class="text-muted"><i class="fab fa-line me-1"></i>ไม่มี Line ID</small>'}
+                            
+                            ${latest.Medication && String(latest.Medication).trim() ? `
+                                <div class="mt-2 p-2 bg-light rounded">
+                                    <small class="text-success fw-bold">
+                                        <i class="fas fa-pills me-1"></i>ยา: ${latest.Medication}
+                                    </small>
+                                    ${latest.MedicationDate ? `
+                                        <br><small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>${new Date(latest.MedicationDate).toLocaleDateString('th-TH')}
+                                        </small>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
                             
                             <div class="mt-2">
                                 <button class="btn btn-sm btn-outline-primary" 
@@ -2176,6 +2238,25 @@ ${highRisk.join('\n')}
                     <p class="mb-2">
                         <strong>ผู้ประเมิน:</strong> ${item.EvaluatorName} (${item.EvaluatorType})
                     </p>
+                    
+                    ${item.Diagnosis && String(item.Diagnosis).trim() ? `
+                        <div class="alert alert-info py-2 mb-2" style="border-radius: 10px;">
+                            <small>
+                                <i class="fas fa-stethoscope me-1"></i><strong>การวินิจฉัย:</strong> ${item.Diagnosis}
+                            </small>
+                        </div>
+                    ` : ''}
+                    
+                    ${item.Medication && String(item.Medication).trim() ? `
+                        <div class="alert alert-success py-2 mb-2" style="border-radius: 10px;">
+                            <small>
+                                <i class="fas fa-pills me-1"></i><strong>ยาที่จ่าย:</strong> ${item.Medication}
+                                ${item.MedicationDate ? `
+                                    <br><i class="fas fa-calendar me-1"></i>วันที่จ่าย: ${new Date(item.MedicationDate).toLocaleDateString('th-TH')}
+                                ` : ''}
+                            </small>
+                        </div>
+                    ` : ''}
                     
                     <div class="row g-2 mb-3">
                         <div class="col-4">
