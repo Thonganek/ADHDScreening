@@ -426,6 +426,23 @@
             font-size: 0.85rem;
         }
 
+        /* Expandable Table */
+        .cursor-pointer {
+            cursor: pointer;
+        }
+        
+        .cursor-pointer:hover {
+            background-color: rgba(13, 110, 253, 0.1) !important;
+        }
+        
+        .village-row {
+            background-color: #f8f9fa;
+        }
+        
+        .village-row:hover {
+            background-color: #e9ecef;
+        }
+
         /* Filter Section */
         .filter-section {
             background: white;
@@ -921,47 +938,24 @@
 
             <!-- Location Tables -->
             <div class="row g-3 mb-4">
-                <div class="col-md-6">
+                <div class="col-12">
                     <div class="card card-custom">
                         <div class="card-header-custom">
-                            <i class="fas fa-map-marker-alt me-2"></i>สถิติตามหมู่บ้าน
+                            <i class="fas fa-map-marker-alt me-2"></i>สถิติตามพื้นที่ (คลิกที่ตำบลเพื่อดูหมู่บ้าน)
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-sm table-hover">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>หมู่ที่</th>
+                                            <th style="width: 40%;">พื้นที่</th>
                                             <th class="text-center">จำนวน</th>
                                             <th class="text-center">ร้อยละ</th>
                                             <th class="text-center">เสี่ยง</th>
                                             <th class="text-center">ปกติ</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="villageTable"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card card-custom">
-                        <div class="card-header-custom">
-                            <i class="fas fa-map-marker-alt me-2"></i>สถิติตามตำบล
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-sm table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>ตำบล</th>
-                                            <th class="text-center">จำนวน</th>
-                                            <th class="text-center">ร้อยละ</th>
-                                            <th class="text-center">เสี่ยง</th>
-                                            <th class="text-center">ปกติ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="subdistrictTable"></tbody>
+                                    <tbody id="locationTable"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -1855,73 +1849,118 @@ ${highRisk.join('\n')}
         }
 
         function updateLocationTables(data) {
-            // Village Table
-            const villageStats = {};
-            data.forEach(item => {
-                const village = (item.Village && String(item.Village).trim()) || 'ไม่ระบุ';
-                if(!villageStats[village]) {
-                    villageStats[village] = { total: 0, risk: 0, normal: 0 };
-                }
-                villageStats[village].total++;
-                if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
-                    villageStats[village].risk++;
-                } else {
-                    villageStats[village].normal++;
-                }
-            });
+            const locationTable = document.getElementById('locationTable');
+            locationTable.innerHTML = '';
             
-            const villageTable = document.getElementById('villageTable');
-            villageTable.innerHTML = '';
+            // Group by Subdistrict and Village
+            const subdistrictData = {};
             
-            Object.keys(villageStats).sort((a, b) => {
-                const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
-                const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
-                return numA - numB;
-            }).forEach(village => {
-                const stat = villageStats[village];
-                const percent = ((stat.total / data.length) * 100).toFixed(1);
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${village}</td>
-                    <td class="text-center"><strong>${stat.total}</strong></td>
-                    <td class="text-center">${percent}%</td>
-                    <td class="text-center"><span class="badge bg-danger">${stat.risk}</span></td>
-                    <td class="text-center"><span class="badge bg-success">${stat.normal}</span></td>
-                `;
-                villageTable.appendChild(tr);
-            });
-            
-            // Subdistrict Table
-            const subdistrictStats = {};
             data.forEach(item => {
                 const subdistrict = (item.SubDistrict && String(item.SubDistrict).trim()) || 'ไม่ระบุ';
-                if(!subdistrictStats[subdistrict]) {
-                    subdistrictStats[subdistrict] = { total: 0, risk: 0, normal: 0 };
+                const village = (item.Village && String(item.Village).trim()) || 'ไม่ระบุ';
+                
+                // Initialize subdistrict
+                if(!subdistrictData[subdistrict]) {
+                    subdistrictData[subdistrict] = {
+                        total: 0,
+                        risk: 0,
+                        normal: 0,
+                        villages: {}
+                    };
                 }
-                subdistrictStats[subdistrict].total++;
+                
+                // Initialize village
+                if(!subdistrictData[subdistrict].villages[village]) {
+                    subdistrictData[subdistrict].villages[village] = {
+                        total: 0,
+                        risk: 0,
+                        normal: 0
+                    };
+                }
+                
+                // Count
+                subdistrictData[subdistrict].total++;
+                subdistrictData[subdistrict].villages[village].total++;
+                
                 if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
-                    subdistrictStats[subdistrict].risk++;
+                    subdistrictData[subdistrict].risk++;
+                    subdistrictData[subdistrict].villages[village].risk++;
                 } else {
-                    subdistrictStats[subdistrict].normal++;
+                    subdistrictData[subdistrict].normal++;
+                    subdistrictData[subdistrict].villages[village].normal++;
                 }
             });
             
-            const subdistrictTable = document.getElementById('subdistrictTable');
-            subdistrictTable.innerHTML = '';
+            // Sort subdistricts
+            const sortedSubdistricts = Object.keys(subdistrictData).sort();
             
-            Object.keys(subdistrictStats).sort().forEach(subdistrict => {
-                const stat = subdistrictStats[subdistrict];
-                const percent = ((stat.total / data.length) * 100).toFixed(1);
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${subdistrict}</td>
-                    <td class="text-center"><strong>${stat.total}</strong></td>
-                    <td class="text-center">${percent}%</td>
-                    <td class="text-center"><span class="badge bg-danger">${stat.risk}</span></td>
-                    <td class="text-center"><span class="badge bg-success">${stat.normal}</span></td>
+            sortedSubdistricts.forEach(subdistrict => {
+                const subdistrictStat = subdistrictData[subdistrict];
+                const percent = ((subdistrictStat.total / data.length) * 100).toFixed(1);
+                const subdistrictId = 'subdistrict_' + subdistrict.replace(/[^a-zA-Z0-9ก-๙]/g, '_');
+                
+                // Subdistrict row
+                const trSubdistrict = document.createElement('tr');
+                trSubdistrict.className = 'table-primary cursor-pointer';
+                trSubdistrict.style.cursor = 'pointer';
+                trSubdistrict.innerHTML = `
+                    <td>
+                        <i class="fas fa-chevron-right me-2" id="icon_${subdistrictId}"></i>
+                        <strong>📍 ${subdistrict}</strong>
+                    </td>
+                    <td class="text-center"><strong>${subdistrictStat.total}</strong></td>
+                    <td class="text-center"><strong>${percent}%</strong></td>
+                    <td class="text-center"><span class="badge bg-danger">${subdistrictStat.risk}</span></td>
+                    <td class="text-center"><span class="badge bg-success">${subdistrictStat.normal}</span></td>
                 `;
-                subdistrictTable.appendChild(tr);
+                
+                trSubdistrict.onclick = function() {
+                    toggleVillages(subdistrictId);
+                };
+                
+                locationTable.appendChild(trSubdistrict);
+                
+                // Village rows (hidden by default)
+                const sortedVillages = Object.keys(subdistrictStat.villages).sort((a, b) => {
+                    const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+                    const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+                    return numA - numB;
+                });
+                
+                sortedVillages.forEach(village => {
+                    const villageStat = subdistrictStat.villages[village];
+                    const villagePercent = ((villageStat.total / subdistrictStat.total) * 100).toFixed(1);
+                    
+                    const trVillage = document.createElement('tr');
+                    trVillage.className = 'village-row ' + subdistrictId;
+                    trVillage.style.display = 'none';
+                    trVillage.innerHTML = `
+                        <td class="ps-5">
+                            <i class="fas fa-home me-2 text-muted"></i>${village}
+                        </td>
+                        <td class="text-center">${villageStat.total}</td>
+                        <td class="text-center">${villagePercent}%</td>
+                        <td class="text-center"><span class="badge bg-danger">${villageStat.risk}</span></td>
+                        <td class="text-center"><span class="badge bg-success">${villageStat.normal}</span></td>
+                    `;
+                    
+                    locationTable.appendChild(trVillage);
+                });
             });
+        }
+        
+        function toggleVillages(subdistrictId) {
+            const villages = document.querySelectorAll('.' + subdistrictId);
+            const icon = document.getElementById('icon_' + subdistrictId);
+            const isHidden = villages[0].style.display === 'none';
+            
+            villages.forEach(row => {
+                row.style.display = isHidden ? 'table-row' : 'none';
+            });
+            
+            if(icon) {
+                icon.className = isHidden ? 'fas fa-chevron-down me-2' : 'fas fa-chevron-right me-2';
+            }
         }
 
         function renderTable(data) {
