@@ -1601,14 +1601,28 @@ ${highRisk.join('\n')}
                 document.getElementById('loadingOverlay').style.display = 'none';
                 if(data.status === 'success') {
                     isLoggedIn = true;
-                    bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
+                    
+                    // Close login modal
+                    const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+                    if(loginModal) {
+                        loginModal.hide();
+                    }
+                    
+                    // Update view and load data if needed
                     updateDashboardView();
+                    
+                    // Reload data to ensure table shows
+                    if(allCases.length === 0) {
+                        loadDashboardData();
+                    } else {
+                        renderTable(filteredCases);
+                    }
                 } else {
                     alert("❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
                 }
             })
             .catch(e => {
-                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + e);
                 document.getElementById('loadingOverlay').style.display = 'none';
             });
         }
@@ -1630,17 +1644,20 @@ ${highRisk.join('\n')}
             })
             .then(r => r.json())
             .then(res => {
+                document.getElementById('loadingOverlay').style.display = 'none';
                 if(res.status === 'success') {
                     allCases = res.data;
                     filteredCases = allCases;
                     updateStats(allCases);
-                    renderTable(allCases);
+                    
+                    // Update view after loading data
                     updateDashboardView();
+                } else {
+                    console.error('Error loading data:', res);
                 }
-                document.getElementById('loadingOverlay').style.display = 'none';
             })
             .catch(e => {
-                console.error(e);
+                console.error('Fetch error:', e);
                 document.getElementById('loadingOverlay').style.display = 'none';
             });
         }
@@ -1657,6 +1674,11 @@ ${highRisk.join('\n')}
                 loginPrompt.style.display = 'none';
                 logoutBtn.style.display = 'block';
                 filterSection.style.display = 'block';
+                
+                // Render table with current data
+                if(allCases.length > 0) {
+                    renderTable(filteredCases);
+                }
             } else {
                 // User is NOT logged in: Hide table, Show login prompt, Hide logout
                 tableContainer.style.display = 'none';
@@ -1778,10 +1800,10 @@ ${highRisk.join('\n')}
             const genderNormal = { 'ชาย': 0, 'หญิง': 0 };
             
             data.forEach(item => {
-                const gender = item.ChildGender || 'ไม่ระบุ';
+                const gender = (item.ChildGender && String(item.ChildGender).trim()) || 'ไม่ระบุ';
                 if(gender === 'ชาย' || gender === 'หญิง') {
                     genderCounts[gender]++;
-                    if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                    if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
                         genderRisk[gender]++;
                     } else {
                         genderNormal[gender]++;
@@ -1836,12 +1858,12 @@ ${highRisk.join('\n')}
             // Village Table
             const villageStats = {};
             data.forEach(item => {
-                const village = item.Village || 'ไม่ระบุ';
+                const village = (item.Village && String(item.Village).trim()) || 'ไม่ระบุ';
                 if(!villageStats[village]) {
                     villageStats[village] = { total: 0, risk: 0, normal: 0 };
                 }
                 villageStats[village].total++;
-                if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
                     villageStats[village].risk++;
                 } else {
                     villageStats[village].normal++;
@@ -1872,12 +1894,12 @@ ${highRisk.join('\n')}
             // Subdistrict Table
             const subdistrictStats = {};
             data.forEach(item => {
-                const subdistrict = item.SubDistrict || 'ไม่ระบุ';
+                const subdistrict = (item.SubDistrict && String(item.SubDistrict).trim()) || 'ไม่ระบุ';
                 if(!subdistrictStats[subdistrict]) {
                     subdistrictStats[subdistrict] = { total: 0, risk: 0, normal: 0 };
                 }
                 subdistrictStats[subdistrict].total++;
-                if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
                     subdistrictStats[subdistrict].risk++;
                 } else {
                     subdistrictStats[subdistrict].normal++;
@@ -1904,7 +1926,19 @@ ${highRisk.join('\n')}
 
         function renderTable(data) {
             const tbody = document.getElementById('dashboardTableBody');
+            if(!tbody) {
+                console.error('Table body element not found!');
+                return;
+            }
+            
             tbody.innerHTML = '';
+            
+            console.log('Rendering table with data:', data.length, 'items');
+            
+            if(data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5">ไม่พบข้อมูล</td></tr>';
+                return;
+            }
             
             // Group by child name to count assessments
             const childGroups = {};
@@ -1915,6 +1949,8 @@ ${highRisk.join('\n')}
                 }
                 childGroups[name].push(item);
             });
+            
+            console.log('Grouped into', Object.keys(childGroups).length, 'unique children');
             
             // Render unique children with their latest assessment
             Object.keys(childGroups).forEach(childName => {
@@ -1928,10 +1964,10 @@ ${highRisk.join('\n')}
                     day: 'numeric'
                 });
                 
-                // Check contact info
-                const hasLine = latest.LineID && latest.LineID.trim() !== '';
-                const hasEmail = latest.Email && latest.Email.trim() !== '';
-                const hasPhone = latest.EvaluatorPhone && latest.EvaluatorPhone.trim() !== '';
+                // Check contact info - handle null/undefined safely
+                const hasLine = latest.LineID && String(latest.LineID).trim() !== '';
+                const hasEmail = latest.Email && String(latest.Email).trim() !== '';
+                const hasPhone = latest.EvaluatorPhone && String(latest.EvaluatorPhone).trim() !== '';
                 
                 const contactBadges = [];
                 if(hasPhone) contactBadges.push('<i class="fas fa-phone text-success" title="มีเบอร์โทร"></i>');
@@ -1965,33 +2001,46 @@ ${highRisk.join('\n')}
                           '<span class="text-muted">ยังไม่มี</span>'}
                     </td>
                     <td>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary" 
-                                    onclick='openAppoint("${latest.ID}", "${latest.ChildName}", "${latest.Email || ''}", "${latest.LineID || ''}")' 
-                                    title="นัดหมาย">
-                                <i class="fas fa-calendar-plus"></i>
-                            </button>
-                            ${hasLine ? `
-                                <a href="https://line.me/ti/p/~${latest.LineID}" target="_blank" 
-                                   class="btn btn-success" title="เพิ่ม Line">
-                                    <i class="fab fa-line"></i>
-                                </a>
-                            ` : ''}
+                        <div class="d-flex flex-column gap-1" style="font-size: 0.85rem;">
                             ${hasEmail ? `
-                                <a href="mailto:${latest.Email}" class="btn btn-warning" title="ส่ง Email">
-                                    <i class="fas fa-envelope"></i>
-                                </a>
-                            ` : ''}
+                                <div>
+                                    <i class="fas fa-envelope text-primary me-1"></i>
+                                    <a href="mailto:${latest.Email}" class="text-decoration-none">
+                                        ${latest.Email}
+                                    </a>
+                                </div>
+                            ` : '<small class="text-muted"><i class="fas fa-envelope me-1"></i>ไม่มี Email</small>'}
+                            
                             ${hasPhone ? `
-                                <a href="tel:${latest.EvaluatorPhone}" class="btn btn-info" title="โทร">
-                                    <i class="fas fa-phone"></i>
-                                </a>
-                            ` : ''}
+                                <div>
+                                    <i class="fas fa-phone text-success me-1"></i>
+                                    <a href="tel:${latest.EvaluatorPhone}" class="text-decoration-none">
+                                        ${latest.EvaluatorPhone}
+                                    </a>
+                                </div>
+                            ` : '<small class="text-muted"><i class="fas fa-phone me-1"></i>ไม่มีเบอร์โทร</small>'}
+                            
+                            ${hasLine ? `
+                                <div>
+                                    <i class="fab fa-line text-success me-1"></i>
+                                    <span class="text-dark">${latest.LineID}</span>
+                                </div>
+                            ` : '<small class="text-muted"><i class="fab fa-line me-1"></i>ไม่มี Line ID</small>'}
+                            
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick='openAppoint("${latest.ID}", "${latest.ChildName}", "${latest.Email || ''}", "${latest.LineID || ''}")' 
+                                        title="นัดหมาย">
+                                    <i class="fas fa-calendar-plus me-1"></i>นัดหมาย
+                                </button>
+                            </div>
                         </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
+            
+            console.log('Table rendered successfully');
         }
 
         // Filter Function
@@ -2005,19 +2054,19 @@ ${highRisk.join('\n')}
             filteredCases = allCases.filter(item => {
                 let match = true;
                 
-                if(searchName && !item.ChildName.toLowerCase().includes(searchName)) {
+                if(searchName && (!item.ChildName || !String(item.ChildName).toLowerCase().includes(searchName))) {
                     match = false;
                 }
                 
-                if(filterRisk && !item.AssessmentResult.includes(filterRisk)) {
+                if(filterRisk && (!item.AssessmentResult || !String(item.AssessmentResult).includes(filterRisk))) {
                     match = false;
                 }
                 
-                if(filterEvaluator && item.EvaluatorType !== filterEvaluator) {
+                if(filterEvaluator && String(item.EvaluatorType) !== filterEvaluator) {
                     match = false;
                 }
                 
-                if(filterSubdistrict && !item.SubDistrict.toLowerCase().includes(filterSubdistrict)) {
+                if(filterSubdistrict && (!item.SubDistrict || !String(item.SubDistrict).toLowerCase().includes(filterSubdistrict))) {
                     match = false;
                 }
                 
@@ -2045,11 +2094,17 @@ ${highRisk.join('\n')}
             
             document.getElementById('historyChildName').innerText = childName;
             
-            // Contact info
+            // Contact info - handle null/undefined safely
             const contactInfo = [];
-            if(latestCase.EvaluatorPhone) contactInfo.push(`📞 ${latestCase.EvaluatorPhone}`);
-            if(latestCase.LineID) contactInfo.push(`💬 Line: ${latestCase.LineID}`);
-            if(latestCase.Email) contactInfo.push(`📧 ${latestCase.Email}`);
+            if(latestCase.EvaluatorPhone && String(latestCase.EvaluatorPhone).trim()) {
+                contactInfo.push(`📞 ${latestCase.EvaluatorPhone}`);
+            }
+            if(latestCase.LineID && String(latestCase.LineID).trim()) {
+                contactInfo.push(`💬 Line: ${latestCase.LineID}`);
+            }
+            if(latestCase.Email && String(latestCase.Email).trim()) {
+                contactInfo.push(`📧 ${latestCase.Email}`);
+            }
             
             document.getElementById('historyChildInfo').innerHTML = 
                 `อายุ ${latestCase.ChildAge} ปี | ประวัติการประเมินทั้งหมด ${childCases.length} ครั้ง<br>` +
