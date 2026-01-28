@@ -1395,198 +1395,266 @@
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1xmTQ_hd4n-FPyqIiUqPhAElgMRdYfUo&libraries=places&callback=initMap"></script>
 
     <script type="module">
-        import { GoogleGenerativeAI } from "@google/generative-ai";
+    import { GoogleGenerativeAI } from "@google/generative-ai";
 
-        // Configuration
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn5cPOIXfkd9YiQJBuxFs8XVxKnn_aioeTytsrWVZk0oZSwYC8ogWpP5Z-uTckpS7x/exec";
-        const AI_KEYS = [
-            "AIzaSyDiqXPAnfMICeehtGSC6VwDJaH9HqTIa-E",
-            "AIzaSyAuGmhGGfVIgdcBS-bDPu06I_fQpIy2Sng",
-            "AIzaSyAXn2RnKle5RdJsD74PHVQbQAcOkPffkb4"
-        ];
+    // Configuration
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn5cPOIXfkd9YiQJBuxFs8XVxKnn_aioeTytsrWVZk0oZSwYC8ogWpP5Z-uTckpS7x/exec";
+    const AI_KEYS = [
+        "AIzaSyDiqXPAnfMICeehtGSC6VwDJaH9HqTIa-E",
+        "AIzaSyAuGmhGGfVIgdcBS-bDPu06I_fQpIy2Sng",
+        "AIzaSyCZrdqZ-WjnDn7fV5gprWuMl4WcF_sIcgY",
+        "AIzaSyAXn2RnKle5RdJsD74PHVQbQAcOkPffkb4"
+    ];
+    
+    let currentKeyIndex = 0;
+    let lastSuccessfulKeyIndex = 0;
+
+    // ฟังก์ชันสำหรับเรียกใช้ Gemini API โดยตรง (ไม่ผ่าน SDK)
+    async function callGeminiDirectAPI(prompt, retryCount = 0) {
+        const maxRetries = AI_KEYS.length;
         
-        let currentKeyIndex = 0;
-        function getGenAI() {
-            const key = AI_KEYS[currentKeyIndex];
-            currentKeyIndex = (currentKeyIndex + 1) % AI_KEYS.length;
-            return new GoogleGenerativeAI(key);
+        if (retryCount >= maxRetries) {
+            throw new Error('ไม่สามารถเชื่อมต่อ API ได้ทุก Key กรุณาลองใหม่อีกครั้ง');
         }
-
-        // Global Variables
-        let map, marker, finalData = {};
-        let allCases = [];
-        let filteredCases = [];
-        let isLoggedIn = false;
-        let ageChart = null;
-        let genderChart = null;
-        let mapInitialized = false;
-
-        // Map Initialization
-        window.initMap = function() {
-            // Don't initialize until called
-            console.log('Google Maps API loaded');
-        }
-
-        function actuallyInitMap() {
-            if(mapInitialized) return;
-            
-            const hospitalPos = { lat: 15.73315086491515, lng: 102.79444248459548 };
-            
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 18,
-                center: hospitalPos,
-                mapTypeId: 'satellite',
-                streetViewControl: false,
-                fullscreenControl: true
+        
+        const apiKey = AI_KEYS[currentKeyIndex];
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        
+        const requestBody = {
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 2048,
+            }
+        };
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
             });
-
-            marker = new google.maps.Marker({
-                position: hospitalPos,
-                map: map,
-                draggable: true,
-                title: "ตำแหน่งบ้าน (ลากเพื่อแก้ไข)",
-                animation: google.maps.Animation.DROP
-            });
-
-            // Add Search Box
-            const input = document.getElementById('mapSearchInput');
-            const searchBox = new google.maps.places.SearchBox(input);
             
-            // Bias search to map viewport
-            map.addListener('bounds_changed', function() {
-                searchBox.setBounds(map.getBounds());
-            });
-
-            // Listen for search box places changed
-            searchBox.addListener('places_changed', function() {
-                const places = searchBox.getPlaces();
-                if (places.length == 0) return;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
                 
-                const place = places[0];
-                if (!place.geometry || !place.geometry.location) return;
+                // ถ้าเป็น error 403, 429 หรือ quota exceeded ให้ลอง key ถัดไป
+                if (response.status === 403 || response.status === 429 || 
+                    (errorData.error && errorData.error.message && 
+                     (errorData.error.message.includes('quota') || 
+                      errorData.error.message.includes('leaked') ||
+                      errorData.error.message.includes('API key')))) {
+                    
+                    console.warn(`API Key ${currentKeyIndex + 1} failed, switching to next key...`);
+                    currentKeyIndex = (currentKeyIndex + 1) % AI_KEYS.length;
+                    return callGeminiDirectAPI(prompt, retryCount + 1);
+                }
                 
-                // Move marker to searched location
-                marker.setPosition(place.geometry.location);
-                map.setCenter(place.geometry.location);
-                map.setZoom(18);
-            });
-
-            // Click to move marker
-            map.addListener('click', function(e) {
-                marker.setPosition(e.latLng);
-            });
-
-            document.getElementById("lat").value = hospitalPos.lat;
-            document.getElementById("lng").value = hospitalPos.lng;
+                throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+            }
             
-            mapInitialized = true;
+            const data = await response.json();
+            
+            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                throw new Error('Invalid response format from API');
+            }
+            
+            lastSuccessfulKeyIndex = currentKeyIndex;
+            return data.candidates[0].content.parts[0].text;
+            
+        } catch (error) {
+            console.error(`Error with API Key ${currentKeyIndex + 1}:`, error);
+            
+            // ถ้าเป็น network error ให้ลอง key ถัดไป
+            if (error.message.includes('fetch') || error.message.includes('network')) {
+                currentKeyIndex = (currentKeyIndex + 1) % AI_KEYS.length;
+                return callGeminiDirectAPI(prompt, retryCount + 1);
+            }
+            
+            throw error;
         }
+    }
 
-        window.openMapModal = function() {
-            const modal = new bootstrap.Modal(document.getElementById('mapModal'));
-            modal.show();
-            
-            // Initialize map when modal opens
-            setTimeout(function() {
-                if(!mapInitialized) {
-                    actuallyInitMap();
-                }
-                // Trigger resize to fix display issues
-                if(map) {
-                    google.maps.event.trigger(map, 'resize');
-                    map.setCenter(marker.getPosition());
-                }
-            }, 500);
-        }
+    // Global Variables
+    let map, marker, finalData = {};
+    let allCases = [];
+    let filteredCases = [];
+    let isLoggedIn = false;
+    let ageChart = null;
+    let genderChart = null;
+    let mapInitialized = false;
 
-        window.confirmLocation = function() {
-            const pos = marker.getPosition();
-            document.getElementById("lat").value = pos.lat();
-            document.getElementById("lng").value = pos.lng();
-            
-            document.getElementById("locationStatus").innerHTML = 
-                `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>บันทึกพิกัดแล้ว: ${pos.lat().toFixed(5)}, ${pos.lng().toFixed(5)}</span>`;
-            
-            bootstrap.Modal.getInstance(document.getElementById('mapModal')).hide();
-        }
+    // Map Initialization
+    window.initMap = function() {
+        // Don't initialize until called
+        console.log('Google Maps API loaded');
+    }
 
-        // Questions Rendering
-        const questions = [
-            {id: 1, text: "มักไม่ละเอียดรอบคอบ ทำอะไรผิดพลาดบ่อย", section: 1},
-            {id: 2, text: "ทำกิจกรรมนานๆ ไม่ได้ สมาธิสั้น", section: 1},
-            {id: 3, text: "ไม่ค่อยฟังเวลาพูดด้วย ใจลอย", section: 1},
-            {id: 4, text: "ทำงานไม่เสร็จตามที่มอบหมาย", section: 1},
-            {id: 5, text: "จัดระเบียบไม่เป็น ของกระจัดกระจาย", section: 1},
-            {id: 6, text: "เลี่ยงงานที่ใช้ความอดทน", section: 1},
-            {id: 7, text: "ทำของหายบ่อย ลืมของตลอด", section: 1},
-            {id: 8, text: "วอกแวกง่าย เสียสมาธิง่าย", section: 1},
-            {id: 9, text: "ขี้ลืม หลงลืมกิจกรรมประจำวัน", section: 1},
-            {id: 10, text: "มือเท้ายุกยิก ไม่หยุดนิ่ง", section: 2},
-            {id: 11, text: "นั่งไม่ติดที่ ลุกขึ้นยืนบ่อย", section: 2},
-            {id: 12, text: "วิ่งไปวิ่งมา ปีนป่ายไม่รู้กาลเทศะ", section: 2},
-            {id: 13, text: "เล่นเงียบๆ ไม่เป็น เสียงดังเสมอ", section: 2},
-            {id: 14, text: "เหมือนติดเครื่องตลอดเวลา", section: 2},
-            {id: 15, text: "พูดมาก พูดไม่หยุด", section: 2},
-            {id: 16, text: "พูดโพล่งก่อนคำถามจบ", section: 2},
-            {id: 17, text: "ไม่ชอบรอคิว แย่งคิวคนอื่น", section: 2},
-            {id: 18, text: "ชอบสอดแทรก ขัดจังหวะคนอื่น", section: 2},
-            {id: 19, text: "อารมณ์เสียง่าย โมโหง่าย", section: 3},
-            {id: 20, text: "เถียงผู้ใหญ่ ไม่เคารพ", section: 3},
-            {id: 21, text: "ไม่ทำตามกฎ ฝ่าฝืนกฎระเบียบ", section: 3},
-            {id: 22, text: "จงใจกวนประสาทคนอื่น", section: 3},
-            {id: 23, text: "โทษคนอื่นเสมอเมื่อทำผิด", section: 3},
-            {id: 24, text: "ขี้รำคาญ หงุดหงิดง่าย", section: 3},
-            {id: 25, text: "โกรธปึงปัง ขี้โมโห", section: 3},
-            {id: 26, text: "เจ้าคิดเจ้าแค้น พยาบาท", section: 3}
-        ];
-
-        questions.forEach(q => {
-            const container = document.getElementById(`section${q.section}-container`);
-            const div = document.createElement("div");
-            div.className = "question-item";
-            div.innerHTML = `
-                <p class="question-text">
-                    <span class="badge bg-secondary me-2">${q.id}</span>
-                    ${q.text}
-                </p>
-                <div class="d-flex gap-2 flex-wrap">
-                    ${[0,1,2,3].map(v => `
-                        <input type="radio" class="btn-check" name="q${q.id}" id="q${q.id}_${v}" value="${v}" required>
-                        <label class="btn btn-outline-pink flex-fill" for="q${q.id}_${v}">
-                            ${['ไม่เลย (0)','เล็กน้อย (1)','ค่อนข้างมาก (2)','มาก (3)'][v]}
-                        </label>
-                    `).join('')}
-                </div>
-            `;
-            container.appendChild(div);
+    function actuallyInitMap() {
+        if(mapInitialized) return;
+        
+        const hospitalPos = { lat: 15.73315086491515, lng: 102.79444248459548 };
+        
+        map = new google.maps.Map(document.getElementById("map"), {
+            zoom: 18,
+            center: hospitalPos,
+            mapTypeId: 'satellite',
+            streetViewControl: false,
+            fullscreenControl: true
         });
 
-        // Form Submit
-        document.getElementById('assessmentForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            let s1 = 0, s2 = 0, s3 = 0, answers = {}, highRisk = [];
-            
-            questions.forEach(q => {
-                const val = parseInt(formData.get(`q${q.id}`));
-                answers[`q${q.id}`] = val;
-                if(q.section === 1) s1 += val;
-                if(q.section === 2) s2 += val;
-                if(q.section === 3) s3 += val;
-                if(val >= 2) highRisk.push(`${q.text} (${val === 2 ? 'ค่อนข้างมาก' : 'มาก'})`);
-            });
+        marker = new google.maps.Marker({
+            position: hospitalPos,
+            map: map,
+            draggable: true,
+            title: "ตำแหน่งบ้าน (ลากเพื่อแก้ไข)",
+            animation: google.maps.Animation.DROP
+        });
 
-            let resultBasic = (s1 > 16 || s2 > 16 || s3 > 14) ? "มีความเสี่ยง ควรพบแพทย์" : "ปกติ";
+        // Add Search Box
+        const input = document.getElementById('mapSearchInput');
+        const searchBox = new google.maps.places.SearchBox(input);
+        
+        // Bias search to map viewport
+        map.addListener('bounds_changed', function() {
+            searchBox.setBounds(map.getBounds());
+        });
+
+        // Listen for search box places changed
+        searchBox.addListener('places_changed', function() {
+            const places = searchBox.getPlaces();
+            if (places.length == 0) return;
             
-            document.getElementById('loadingOverlay').style.display = 'flex';
+            const place = places[0];
+            if (!place.geometry || !place.geometry.location) return;
             
-            try {
-                const genAI = getGenAI();
-                const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-                
-                const prompt = `วิเคราะห์ผลการประเมิน SNAP-IV สำหรับเด็กชื่อ ${document.getElementById('childName').value} อายุ ${document.getElementById('childAge').value} ปี
-                
+            // Move marker to searched location
+            marker.setPosition(place.geometry.location);
+            map.setCenter(place.geometry.location);
+            map.setZoom(18);
+        });
+
+        // Click to move marker
+        map.addListener('click', function(e) {
+            marker.setPosition(e.latLng);
+        });
+
+        document.getElementById("lat").value = hospitalPos.lat;
+        document.getElementById("lng").value = hospitalPos.lng;
+        
+        mapInitialized = true;
+    }
+
+    window.openMapModal = function() {
+        const modal = new bootstrap.Modal(document.getElementById('mapModal'));
+        modal.show();
+        
+        // Initialize map when modal opens
+        setTimeout(function() {
+            if(!mapInitialized) {
+                actuallyInitMap();
+            }
+            // Trigger resize to fix display issues
+            if(map) {
+                google.maps.event.trigger(map, 'resize');
+                map.setCenter(marker.getPosition());
+            }
+        }, 500);
+    }
+
+    window.confirmLocation = function() {
+        const pos = marker.getPosition();
+        document.getElementById("lat").value = pos.lat();
+        document.getElementById("lng").value = pos.lng();
+        
+        document.getElementById("locationStatus").innerHTML = 
+            `<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>บันทึกพิกัดแล้ว: ${pos.lat().toFixed(5)}, ${pos.lng().toFixed(5)}</span>`;
+        
+        bootstrap.Modal.getInstance(document.getElementById('mapModal')).hide();
+    }
+
+    // Questions Rendering
+    const questions = [
+        {id: 1, text: "มักไม่ละเอียดรอบคอบ ทำอะไรผิดพลาดบ่อย", section: 1},
+        {id: 2, text: "ทำกิจกรรมนานๆ ไม่ได้ สมาธิสั้น", section: 1},
+        {id: 3, text: "ไม่ค่อยฟังเวลาพูดด้วย ใจลอย", section: 1},
+        {id: 4, text: "ทำงานไม่เสร็จตามที่มอบหมาย", section: 1},
+        {id: 5, text: "จัดระเบียบไม่เป็น ของกระจัดกระจาย", section: 1},
+        {id: 6, text: "เลี่ยงงานที่ใช้ความอดทน", section: 1},
+        {id: 7, text: "ทำของหายบ่อย ลืมของตลอด", section: 1},
+        {id: 8, text: "วอกแวกง่าย เสียสมาธิง่าย", section: 1},
+        {id: 9, text: "ขี้ลืม หลงลืมกิจกรรมประจำวัน", section: 1},
+        {id: 10, text: "มือเท้ายุกยิก ไม่หยุดนิ่ง", section: 2},
+        {id: 11, text: "นั่งไม่ติดที่ ลุกขึ้นยืนบ่อย", section: 2},
+        {id: 12, text: "วิ่งไปวิ่งมา ปีนป่ายไม่รู้กาลเทศะ", section: 2},
+        {id: 13, text: "เล่นเงียบๆ ไม่เป็น เสียงดังเสมอ", section: 2},
+        {id: 14, text: "เหมือนติดเครื่องตลอดเวลา", section: 2},
+        {id: 15, text: "พูดมาก พูดไม่หยุด", section: 2},
+        {id: 16, text: "พูดโพล่งก่อนคำถามจบ", section: 2},
+        {id: 17, text: "ไม่ชอบรอคิว แย่งคิวคนอื่น", section: 2},
+        {id: 18, text: "ชอบสอดแทรก ขัดจังหวะคนอื่น", section: 2},
+        {id: 19, text: "อารมณ์เสียง่าย โมโหง่าย", section: 3},
+        {id: 20, text: "เถียงผู้ใหญ่ ไม่เคารพ", section: 3},
+        {id: 21, text: "ไม่ทำตามกฎ ฝ่าฝืนกฎระเบียบ", section: 3},
+        {id: 22, text: "จงใจกวนประสาทคนอื่น", section: 3},
+        {id: 23, text: "โทษคนอื่นเสมอเมื่อทำผิด", section: 3},
+        {id: 24, text: "ขี้รำคาญ หงุดหงิดง่าย", section: 3},
+        {id: 25, text: "โกรธปึงปัง ขี้โมโห", section: 3},
+        {id: 26, text: "เจ้าคิดเจ้าแค้น พยาบาท", section: 3}
+    ];
+
+    questions.forEach(q => {
+        const container = document.getElementById(`section${q.section}-container`);
+        const div = document.createElement("div");
+        div.className = "question-item";
+        div.innerHTML = `
+            <p class="question-text">
+                <span class="badge bg-secondary me-2">${q.id}</span>
+                ${q.text}
+            </p>
+            <div class="d-flex gap-2 flex-wrap">
+                ${[0,1,2,3].map(v => `
+                    <input type="radio" class="btn-check" name="q${q.id}" id="q${q.id}_${v}" value="${v}" required>
+                    <label class="btn btn-outline-pink flex-fill" for="q${q.id}_${v}">
+                        ${['ไม่เลย (0)','เล็กน้อย (1)','ค่อนข้างมาก (2)','มาก (3)'][v]}
+                    </label>
+                `).join('')}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    // Form Submit - ใช้ Direct API แทน SDK
+    document.getElementById('assessmentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        let s1 = 0, s2 = 0, s3 = 0, answers = {}, highRisk = [];
+        
+        questions.forEach(q => {
+            const val = parseInt(formData.get(`q${q.id}`));
+            answers[`q${q.id}`] = val;
+            if(q.section === 1) s1 += val;
+            if(q.section === 2) s2 += val;
+            if(q.section === 3) s3 += val;
+            if(val >= 2) highRisk.push(`${q.text} (${val === 2 ? 'ค่อนข้างมาก' : 'มาก'})`);
+        });
+
+        let resultBasic = (s1 > 16 || s2 > 16 || s3 > 14) ? "มีความเสี่ยง ควรพบแพทย์" : "ปกติ";
+        
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        try {
+            const prompt = `วิเคราะห์ผลการประเมิน SNAP-IV สำหรับเด็กชื่อ ${document.getElementById('childName').value} อายุ ${document.getElementById('childAge').value} ปี
+            
 คะแนนที่ได้:
 - ขาดสมาธิ: ${s1}/27 (เกณฑ์เสี่ยง > 16)
 - ซน/หุนหัน: ${s2}/27 (เกณฑ์เสี่ยง > 16)
@@ -1603,490 +1671,489 @@ ${highRisk.join('\n')}
 
 จัดรูปแบบเป็น HTML ด้วย <ul> <li> ไม่ต้องมี markdown`;
 
-                const result = await model.generateContent(prompt);
-                const aiRes = result.response.text().replace(/```html/g, '').replace(/```/g, '').trim();
+            // ใช้ฟังก์ชัน Direct API
+            const aiRes = await callGeminiDirectAPI(prompt);
 
-                document.getElementById('res-score1').innerText = s1;
-                document.getElementById('res-score2').innerText = s2;
-                document.getElementById('res-score3').innerText = s3;
-                document.getElementById('res-basic-summary').innerText = resultBasic;
-                document.getElementById('ai-analysis-content').innerHTML = aiRes;
+            document.getElementById('res-score1').innerText = s1;
+            document.getElementById('res-score2').innerText = s2;
+            document.getElementById('res-score3').innerText = s3;
+            document.getElementById('res-basic-summary').innerText = resultBasic;
+            document.getElementById('ai-analysis-content').innerHTML = aiRes;
 
-                finalData = {
-                    action: 'submit_assessment',
-                    evaluatorType: document.getElementById('evaluatorType').value,
-                    evaluatorName: document.getElementById('evaluatorName').value,
-                    evaluatorPhone: document.getElementById('evaluatorPhone').value,
-                    childName: document.getElementById('childName').value,
-                    childAge: document.getElementById('childAge').value,
-                    lineId: document.getElementById('lineId').value,
-                    email: document.getElementById('emailContact').value,
-                    houseNo: document.getElementById('houseNo').value,
-                    village: document.getElementById('village').value,
-                    subDistrict: document.getElementById('subDistrict').value,
-                    district: document.getElementById('district').value,
-                    province: document.getElementById('province').value,
-                    lat: document.getElementById('lat').value,
-                    lng: document.getElementById('lng').value,
-                    diagnosis: document.getElementById('diagnosis').value || '',
-                    medication: document.getElementById('medication').value || '',
-                    medicationDate: document.getElementById('medicationDate').value || '',
-                    ...answers,
-                    scoreInattention: s1,
-                    scoreHyperactivity: s2,
-                    scoreOppositional: s3,
-                    totalScore: s1 + s2 + s3,
-                    resultText: resultBasic,
-                    aiSummary: "Processed",
-                    aiAdvice: aiRes
-                };
+            finalData = {
+                action: 'submit_assessment',
+                evaluatorType: document.getElementById('evaluatorType').value,
+                evaluatorName: document.getElementById('evaluatorName').value,
+                evaluatorPhone: document.getElementById('evaluatorPhone').value,
+                childName: document.getElementById('childName').value,
+                childAge: document.getElementById('childAge').value,
+                childGender: document.getElementById('childGender').value,
+                childCID: document.getElementById('childCID').value || '',
+                lineId: document.getElementById('lineId').value,
+                email: document.getElementById('emailContact').value,
+                houseNo: document.getElementById('houseNo').value,
+                village: document.getElementById('village').value,
+                subDistrict: document.getElementById('subDistrict').value,
+                district: document.getElementById('district').value,
+                province: document.getElementById('province').value,
+                lat: document.getElementById('lat').value,
+                lng: document.getElementById('lng').value,
+                ...answers,
+                scoreInattention: s1,
+                scoreHyperactivity: s2,
+                scoreOppositional: s3,
+                totalScore: s1 + s2 + s3,
+                resultText: resultBasic,
+                aiSummary: "Processed",
+                aiAdvice: aiRes
+            };
 
-                new bootstrap.Modal(document.getElementById('resultModal')).show();
-                
-            } catch(err) {
-                alert("เกิดข้อผิดพลาดจาก AI: " + err);
-            } finally {
-                document.getElementById('loadingOverlay').style.display = 'none';
-            }
+            new bootstrap.Modal(document.getElementById('resultModal')).show();
+            
+        } catch(err) {
+            console.error('AI Error:', err);
+            alert("เกิดข้อผิดพลาดจาก AI: " + err.message + "\n\nกรุณาลองใหม่อีกครั้ง");
+        } finally {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+    });
+
+    // Save to Sheet
+    window.confirmSaveToSheet = function() {
+        if(SCRIPT_URL.includes("YOUR_WEB")) {
+            alert("กรุณาใส่ Web App URL");
+            return;
+        }
+        
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify(finalData)
+        })
+        .then(() => {
+            alert("✅ บันทึกข้อมูลสำเร็จ!");
+            window.location.reload();
+        })
+        .catch(e => {
+            alert("❌ เกิดข้อผิดพลาด: " + e);
+            document.getElementById('loadingOverlay').style.display = 'none';
         });
+    }
 
-        // Save to Sheet
-        window.confirmSaveToSheet = function() {
-            if(SCRIPT_URL.includes("YOUR_WEB")) {
-                alert("กรุณาใส่ Web App URL");
-                return;
-            }
-            
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify(finalData)
-            })
-            .then(() => {
-                alert("✅ บันทึกข้อมูลสำเร็จ!");
-                window.location.reload();
-            })
-            .catch(e => {
-                alert("❌ เกิดข้อผิดพลาด: " + e);
-                document.getElementById('loadingOverlay').style.display = 'none';
-            });
+    // Section Navigation
+    window.showSection = function(sec) {
+        ['landingSection', 'assessmentSection', 'dashboardSection'].forEach(id => {
+            document.getElementById(id).style.display = 'none';
+        });
+        
+        if(sec === 'landing') {
+            document.getElementById('landingSection').style.display = 'block';
         }
-
-        // Section Navigation
-        window.showSection = function(sec) {
-            ['landingSection', 'assessmentSection', 'dashboardSection'].forEach(id => {
-                document.getElementById(id).style.display = 'none';
-            });
-            
-            if(sec === 'landing') {
-                document.getElementById('landingSection').style.display = 'block';
-            }
-            if(sec === 'assessment') {
-                document.getElementById('assessmentSection').style.display = 'block';
-                window.scrollTo(0, 0);
-            }
-            if(sec === 'dashboard') {
-                document.getElementById('dashboardSection').style.display = 'block';
-                loadDashboardData();
-            }
+        if(sec === 'assessment') {
+            document.getElementById('assessmentSection').style.display = 'block';
+            window.scrollTo(0, 0);
         }
-
-        // Login
-        window.showLoginModal = function() {
-            new bootstrap.Modal(document.getElementById('loginModal')).show();
+        if(sec === 'dashboard') {
+            document.getElementById('dashboardSection').style.display = 'block';
+            loadDashboardData();
         }
+    }
 
-        window.doLogin = function() {
-            const u = document.getElementById('loginUser').value;
-            const p = document.getElementById('loginPass').value;
-            
-            if(!u || !p) {
-                alert("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
-                return;
-            }
-            
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({action: 'login', username: u, password: p})
-            })
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-                if(data.status === 'success') {
-                    isLoggedIn = true;
-                    
-                    // Close login modal
-                    const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
-                    if(loginModal) {
-                        loginModal.hide();
-                    }
-                    
-                    // Update view and load data if needed
-                    updateDashboardView();
-                    
-                    // Reload data to ensure table shows
-                    if(allCases.length === 0) {
-                        loadDashboardData();
-                    } else {
-                        renderTable(filteredCases);
-                    }
-                } else {
-                    alert("❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
-                }
-            })
-            .catch(e => {
-                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + e);
-                document.getElementById('loadingOverlay').style.display = 'none';
-            });
+    // Login
+    window.showLoginModal = function() {
+        new bootstrap.Modal(document.getElementById('loginModal')).show();
+    }
+
+    window.doLogin = function() {
+        const u = document.getElementById('loginUser').value;
+        const p = document.getElementById('loginPass').value;
+        
+        if(!u || !p) {
+            alert("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
+            return;
         }
-
-        window.logout = function() {
-            isLoggedIn = false;
-            document.getElementById('loginUser').value = '';
-            document.getElementById('loginPass').value = '';
-            updateDashboardView();
-        }
-
-        // Dashboard
-        function loadDashboardData() {
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({action: 'get_dashboard_data'})
-            })
-            .then(r => r.json())
-            .then(res => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-                if(res.status === 'success') {
-                    allCases = res.data;
-                    filteredCases = allCases;
-                    updateStats(allCases);
-                    
-                    // Update view after loading data
-                    updateDashboardView();
-                } else {
-                    console.error('Error loading data:', res);
-                }
-            })
-            .catch(e => {
-                console.error('Fetch error:', e);
-                document.getElementById('loadingOverlay').style.display = 'none';
-            });
-        }
-
-        function updateDashboardView() {
-            const tableContainer = document.getElementById('tableContainer');
-            const loginPrompt = document.getElementById('loginPrompt');
-            const logoutBtn = document.getElementById('logoutBtn');
-            const filterSection = document.getElementById('filterSection');
-
-            if(isLoggedIn) {
-                // User is logged in: Show table, Hide login prompt, Show logout
-                tableContainer.style.display = 'block';
-                loginPrompt.style.display = 'none';
-                logoutBtn.style.display = 'block';
-                filterSection.style.display = 'block';
+        
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({action: 'login', username: u, password: p})
+        })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            if(data.status === 'success') {
+                isLoggedIn = true;
                 
-                // Render table with current data
-                if(allCases.length > 0) {
+                // Close login modal
+                const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+                if(loginModal) {
+                    loginModal.hide();
+                }
+                
+                // Update view and load data if needed
+                updateDashboardView();
+                
+                // Reload data to ensure table shows
+                if(allCases.length === 0) {
+                    loadDashboardData();
+                } else {
                     renderTable(filteredCases);
                 }
             } else {
-                // User is NOT logged in: Hide table, Show login prompt, Hide logout
-                tableContainer.style.display = 'none';
-                loginPrompt.style.display = 'block';
-                logoutBtn.style.display = 'none';
-                filterSection.style.display = 'none';
+                alert("❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
             }
-        }
+        })
+        .catch(e => {
+            alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + e);
+            document.getElementById('loadingOverlay').style.display = 'none';
+        });
+    }
 
-        function updateStats(data) {
-            document.getElementById('statTotal').innerText = data.length;
-            
-            const riskCases = data.filter(d => d.AssessmentResult && d.AssessmentResult.includes('เสี่ยง'));
-            document.getElementById('statRisk').innerText = riskCases.length;
-            
-            const normalCases = data.filter(d => d.AssessmentResult && d.AssessmentResult.includes('ปกติ'));
-            document.getElementById('statNormal').innerText = normalCases.length;
-            
-            const today = new Date().toLocaleDateString('th-TH');
-            const todayAppts = data.filter(d => {
-                if(!d.AppointmentDate) return false;
-                const apptDate = new Date(d.AppointmentDate).toLocaleDateString('th-TH');
-                return apptDate === today;
-            });
-            document.getElementById('statToday').innerText = todayAppts.length;
-            
-            // Update Charts
-            updateAgeChart(data);
-            updateGenderChart(data);
-            updateLocationTables(data);
-        }
+    window.logout = function() {
+        isLoggedIn = false;
+        document.getElementById('loginUser').value = '';
+        document.getElementById('loginPass').value = '';
+        updateDashboardView();
+    }
 
-        function updateAgeChart(data) {
-            // Count by age (0-12)
-            const ageCounts = {};
-            const ageRisk = {};
-            const ageNormal = {};
-            
-            for(let i = 0; i <= 12; i++) {
-                ageCounts[i] = 0;
-                ageRisk[i] = 0;
-                ageNormal[i] = 0;
+    // Dashboard
+    function loadDashboardData() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({action: 'get_dashboard_data'})
+        })
+        .then(r => r.json())
+        .then(res => {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            if(res.status === 'success') {
+                allCases = res.data;
+                filteredCases = allCases;
+                updateStats(allCases);
+                
+                // Update view after loading data
+                updateDashboardView();
+            } else {
+                console.error('Error loading data:', res);
             }
-            
-            data.forEach(item => {
-                const age = parseInt(item.ChildAge);
-                if(age >= 0 && age <= 12) {
-                    ageCounts[age]++;
-                    if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
-                        ageRisk[age]++;
-                    } else {
-                        ageNormal[age]++;
-                    }
-                }
-            });
-            
-            const labels = [];
-            const riskData = [];
-            const normalData = [];
-            
-            for(let i = 0; i <= 12; i++) {
-                labels.push(i + ' ปี');
-                riskData.push(ageRisk[i]);
-                normalData.push(ageNormal[i]);
-            }
-            
-            const ctx = document.getElementById('ageChart');
-            
-            if(ageChart) {
-                ageChart.destroy();
-            }
-            
-            ageChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'เสี่ยง',
-                        data: riskData,
-                        borderColor: '#f5576c',
-                        backgroundColor: 'rgba(245, 87, 108, 0.2)',
-                        tension: 0.4,
-                        fill: true
-                    }, {
-                        label: 'ปกติ',
-                        data: normalData,
-                        borderColor: '#4facfe',
-                        backgroundColor: 'rgba(79, 172, 254, 0.2)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        title: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        }
-                    }
-                }
-            });
-        }
+        })
+        .catch(e => {
+            console.error('Fetch error:', e);
+            document.getElementById('loadingOverlay').style.display = 'none';
+        });
+    }
 
-        function updateGenderChart(data) {
-            const genderCounts = { 'ชาย': 0, 'หญิง': 0 };
-            const genderRisk = { 'ชาย': 0, 'หญิง': 0 };
-            const genderNormal = { 'ชาย': 0, 'หญิง': 0 };
-            
-            data.forEach(item => {
-                const gender = (item.ChildGender && String(item.ChildGender).trim()) || 'ไม่ระบุ';
-                if(gender === 'ชาย' || gender === 'หญิง') {
-                    genderCounts[gender]++;
-                    if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
-                        genderRisk[gender]++;
-                    } else {
-                        genderNormal[gender]++;
-                    }
-                }
-            });
-            
-            const ctx = document.getElementById('genderChart');
-            
-            if(genderChart) {
-                genderChart.destroy();
-            }
-            
-            genderChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['ชาย', 'หญิง'],
-                    datasets: [{
-                        label: 'เสี่ยง',
-                        data: [genderRisk['ชาย'], genderRisk['หญิง']],
-                        backgroundColor: '#f5576c'
-                    }, {
-                        label: 'ปกติ',
-                        data: [genderNormal['ชาย'], genderNormal['หญิง']],
-                        backgroundColor: '#4facfe'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        },
-                        x: {
-                            stacked: false
-                        }
-                    }
-                }
-            });
-        }
+    function updateDashboardView() {
+        const tableContainer = document.getElementById('tableContainer');
+        const loginPrompt = document.getElementById('loginPrompt');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const filterSection = document.getElementById('filterSection');
 
-        function updateLocationTables(data) {
-            const locationTable = document.getElementById('locationTable');
-            locationTable.innerHTML = '';
+        if(isLoggedIn) {
+            // User is logged in: Show table, Hide login prompt, Show logout
+            tableContainer.style.display = 'block';
+            loginPrompt.style.display = 'none';
+            logoutBtn.style.display = 'block';
+            filterSection.style.display = 'block';
             
-            // Group by Subdistrict and Village
-            const subdistrictData = {};
-            
-            data.forEach(item => {
-                const subdistrict = (item.SubDistrict && String(item.SubDistrict).trim()) || 'ไม่ระบุ';
-                const village = (item.Village && String(item.Village).trim()) || 'ไม่ระบุ';
-                
-                // Initialize subdistrict
-                if(!subdistrictData[subdistrict]) {
-                    subdistrictData[subdistrict] = {
-                        total: 0,
-                        risk: 0,
-                        normal: 0,
-                        villages: {}
-                    };
-                }
-                
-                // Initialize village
-                if(!subdistrictData[subdistrict].villages[village]) {
-                    subdistrictData[subdistrict].villages[village] = {
-                        total: 0,
-                        risk: 0,
-                        normal: 0
-                    };
-                }
-                
-                // Count
-                subdistrictData[subdistrict].total++;
-                subdistrictData[subdistrict].villages[village].total++;
-                
-                if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
-                    subdistrictData[subdistrict].risk++;
-                    subdistrictData[subdistrict].villages[village].risk++;
-                } else {
-                    subdistrictData[subdistrict].normal++;
-                    subdistrictData[subdistrict].villages[village].normal++;
-                }
-            });
-            
-            // Sort subdistricts
-            const sortedSubdistricts = Object.keys(subdistrictData).sort();
-            
-            sortedSubdistricts.forEach(subdistrict => {
-                const subdistrictStat = subdistrictData[subdistrict];
-                const percent = ((subdistrictStat.total / data.length) * 100).toFixed(1);
-                const subdistrictId = 'subdistrict_' + subdistrict.replace(/[^a-zA-Z0-9ก-๙]/g, '_');
-                
-                // Subdistrict row
-                const trSubdistrict = document.createElement('tr');
-                trSubdistrict.className = 'table-primary cursor-pointer';
-                trSubdistrict.style.cursor = 'pointer';
-                trSubdistrict.innerHTML = `
-                    <td>
-                        <i class="fas fa-chevron-right me-2" id="icon_${subdistrictId}"></i>
-                        <strong>📍 ${subdistrict}</strong>
-                    </td>
-                    <td class="text-center"><strong>${subdistrictStat.total}</strong></td>
-                    <td class="text-center"><strong>${percent}%</strong></td>
-                    <td class="text-center"><span class="badge bg-danger">${subdistrictStat.risk}</span></td>
-                    <td class="text-center"><span class="badge bg-success">${subdistrictStat.normal}</span></td>
-                `;
-                
-                trSubdistrict.onclick = function() {
-                    toggleVillages(subdistrictId);
-                };
-                
-                locationTable.appendChild(trSubdistrict);
-                
-                // Village rows (hidden by default)
-                const sortedVillages = Object.keys(subdistrictStat.villages).sort((a, b) => {
-                    const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
-                    const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
-                    return numA - numB;
-                });
-                
-                sortedVillages.forEach(village => {
-                    const villageStat = subdistrictStat.villages[village];
-                    const villagePercent = ((villageStat.total / subdistrictStat.total) * 100).toFixed(1);
-                    
-                    const trVillage = document.createElement('tr');
-                    trVillage.className = 'village-row ' + subdistrictId;
-                    trVillage.style.display = 'none';
-                    trVillage.innerHTML = `
-                        <td class="ps-5">
-                            <i class="fas fa-home me-2 text-muted"></i>${village}
-                        </td>
-                        <td class="text-center">${villageStat.total}</td>
-                        <td class="text-center">${villagePercent}%</td>
-                        <td class="text-center"><span class="badge bg-danger">${villageStat.risk}</span></td>
-                        <td class="text-center"><span class="badge bg-success">${villageStat.normal}</span></td>
-                    `;
-                    
-                    locationTable.appendChild(trVillage);
-                });
-            });
+            // Render table with current data
+            if(allCases.length > 0) {
+                renderTable(filteredCases);
+            }
+        } else {
+            // User is NOT logged in: Hide table, Show login prompt, Hide logout
+            tableContainer.style.display = 'none';
+            loginPrompt.style.display = 'block';
+            logoutBtn.style.display = 'none';
+            filterSection.style.display = 'none';
+        }
+    }
+
+    function updateStats(data) {
+        document.getElementById('statTotal').innerText = data.length;
+        
+        const riskCases = data.filter(d => d.AssessmentResult && d.AssessmentResult.includes('เสี่ยง'));
+        document.getElementById('statRisk').innerText = riskCases.length;
+        
+        const normalCases = data.filter(d => d.AssessmentResult && d.AssessmentResult.includes('ปกติ'));
+        document.getElementById('statNormal').innerText = normalCases.length;
+        
+        const today = new Date().toLocaleDateString('th-TH');
+        const todayAppts = data.filter(d => {
+            if(!d.AppointmentDate) return false;
+            const apptDate = new Date(d.AppointmentDate).toLocaleDateString('th-TH');
+            return apptDate === today;
+        });
+        document.getElementById('statToday').innerText = todayAppts.length;
+        
+        // Update Charts
+        updateAgeChart(data);
+        updateGenderChart(data);
+        updateLocationTables(data);
+    }
+
+    function updateAgeChart(data) {
+        // Count by age (0-12)
+        const ageCounts = {};
+        const ageRisk = {};
+        const ageNormal = {};
+        
+        for(let i = 0; i <= 12; i++) {
+            ageCounts[i] = 0;
+            ageRisk[i] = 0;
+            ageNormal[i] = 0;
         }
         
-        function toggleVillages(subdistrictId) {
-            const villages = document.querySelectorAll('.' + subdistrictId);
-            const icon = document.getElementById('icon_' + subdistrictId);
-            const isHidden = villages[0].style.display === 'none';
-            
-            villages.forEach(row => {
-                row.style.display = isHidden ? 'table-row' : 'none';
-            });
-            
-            if(icon) {
-                icon.className = isHidden ? 'fas fa-chevron-down me-2' : 'fas fa-chevron-right me-2';
+        data.forEach(item => {
+            const age = parseInt(item.ChildAge);
+            if(age >= 0 && age <= 12) {
+                ageCounts[age]++;
+                if(item.AssessmentResult && item.AssessmentResult.includes('เสี่ยง')) {
+                    ageRisk[age]++;
+                } else {
+                    ageNormal[age]++;
+                }
             }
+        });
+        
+        const labels = [];
+        const riskData = [];
+        const normalData = [];
+        
+        for(let i = 0; i <= 12; i++) {
+            labels.push(i + ' ปี');
+            riskData.push(ageRisk[i]);
+            normalData.push(ageNormal[i]);
         }
+        
+        const ctx = document.getElementById('ageChart');
+        
+        if(ageChart) {
+            ageChart.destroy();
+        }
+        
+        ageChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'เสี่ยง',
+                    data: riskData,
+                    borderColor: '#f5576c',
+                    backgroundColor: 'rgba(245, 87, 108, 0.2)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'ปกติ',
+                    data: normalData,
+                    borderColor: '#4facfe',
+                    backgroundColor: 'rgba(79, 172, 254, 0.2)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
 
-        function renderTable(data) {
+    function updateGenderChart(data) {
+        const genderCounts = { 'ชาย': 0, 'หญิง': 0 };
+        const genderRisk = { 'ชาย': 0, 'หญิง': 0 };
+        const genderNormal = { 'ชาย': 0, 'หญิง': 0 };
+        
+        data.forEach(item => {
+            const gender = (item.ChildGender && String(item.ChildGender).trim()) || 'ไม่ระบุ';
+            if(gender === 'ชาย' || gender === 'หญิง') {
+                genderCounts[gender]++;
+                if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
+                    genderRisk[gender]++;
+                } else {
+                    genderNormal[gender]++;
+                }
+            }
+        });
+        
+        const ctx = document.getElementById('genderChart');
+        
+        if(genderChart) {
+            genderChart.destroy();
+        }
+        
+        genderChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['ชาย', 'หญิง'],
+                datasets: [{
+                    label: 'เสี่ยง',
+                    data: [genderRisk['ชาย'], genderRisk['หญิง']],
+                    backgroundColor: '#f5576c'
+                }, {
+                    label: 'ปกติ',
+                    data: [genderNormal['ชาย'], genderNormal['หญิง']],
+                    backgroundColor: '#4facfe'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    },
+                    x: {
+                        stacked: false
+                    }
+                }
+            }
+        });
+    }
+
+    function updateLocationTables(data) {
+        const locationTable = document.getElementById('locationTable');
+        locationTable.innerHTML = '';
+        
+        // Group by Subdistrict and Village
+        const subdistrictData = {};
+        
+        data.forEach(item => {
+            const subdistrict = (item.SubDistrict && String(item.SubDistrict).trim()) || 'ไม่ระบุ';
+            const village = (item.Village && String(item.Village).trim()) || 'ไม่ระบุ';
+            
+            // Initialize subdistrict
+            if(!subdistrictData[subdistrict]) {
+                subdistrictData[subdistrict] = {
+                    total: 0,
+                    risk: 0,
+                    normal: 0,
+                    villages: {}
+                };
+            }
+            
+            // Initialize village
+            if(!subdistrictData[subdistrict].villages[village]) {
+                subdistrictData[subdistrict].villages[village] = {
+                    total: 0,
+                    risk: 0,
+                    normal: 0
+                };
+            }
+            
+            // Count
+            subdistrictData[subdistrict].total++;
+            subdistrictData[subdistrict].villages[village].total++;
+            
+            if(item.AssessmentResult && String(item.AssessmentResult).includes('เสี่ยง')) {
+                subdistrictData[subdistrict].risk++;
+                subdistrictData[subdistrict].villages[village].risk++;
+                } else {
+                subdistrictData[subdistrict].normal++;
+                subdistrictData[subdistrict].villages[village].normal++;
+                }
+            });
+            // Sort subdistricts
+    const sortedSubdistricts = Object.keys(subdistrictData).sort();
+    
+    sortedSubdistricts.forEach(subdistrict => {
+        const subdistrictStat = subdistrictData[subdistrict];
+        const percent = ((subdistrictStat.total / data.length) * 100).toFixed(1);
+        const subdistrictId = 'subdistrict_' + subdistrict.replace(/[^a-zA-Z0-9ก-๙]/g, '_');
+        
+        // Subdistrict row
+        const trSubdistrict = document.createElement('tr');
+        trSubdistrict.className = 'table-primary cursor-pointer';
+        trSubdistrict.style.cursor = 'pointer';
+        trSubdistrict.innerHTML = `
+            <td>
+                <i class="fas fa-chevron-right me-2" id="icon_${subdistrictId}"></i>
+                <strong>📍 ${subdistrict}</strong>
+            </td>
+            <td class="text-center"><strong>${subdistrictStat.total}</strong></td>
+            <td class="text-center"><strong>${percent}%</strong></td>
+            <td class="text-center"><span class="badge bg-danger">${subdistrictStat.risk}</span></td>
+            <td class="text-center"><span class="badge bg-success">${subdistrictStat.normal}</span></td>
+        `;
+        
+        trSubdistrict.onclick = function() {
+            toggleVillages(subdistrictId);
+        };
+        
+        locationTable.appendChild(trSubdistrict);
+        
+        // Village rows (hidden by default)
+        const sortedVillages = Object.keys(subdistrictStat.villages).sort((a, b) => {
+            const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+            const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+            return numA - numB;
+        });
+        
+        sortedVillages.forEach(village => {
+            const villageStat = subdistrictStat.villages[village];
+            const villagePercent = ((villageStat.total / subdistrictStat.total) * 100).toFixed(1);
+            
+            const trVillage = document.createElement('tr');
+            trVillage.className = 'village-row ' + subdistrictId;
+            trVillage.style.display = 'none';
+            trVillage.innerHTML = `
+                <td class="ps-5">
+                    <i class="fas fa-home me-2 text-muted"></i>${village}
+                </td>
+                <td class="text-center">${villageStat.total}</td>
+                <td class="text-center">${villagePercent}%</td>
+                <td class="text-center"><span class="badge bg-danger">${villageStat.risk}</span></td>
+                <td class="text-center"><span class="badge bg-success">${villageStat.normal}</span></td>
+            `;
+            
+            locationTable.appendChild(trVillage);
+        });
+    });
+}
+
+function toggleVillages(subdistrictId) {
+    const villages = document.querySelectorAll('.' + subdistrictId);
+    const icon = document.getElementById('icon_' + subdistrictId);
+    const isHidden = villages[0].style.display === 'none';
+    
+    villages.forEach(row => {
+        row.style.display = isHidden ? 'table-row' : 'none';
+    });
+    
+    if(icon) {
+        icon.className = isHidden ? 'fas fa-chevron-down me-2' : 'fas fa-chevron-right me-2';
+    }
+}
+
+function renderTable(data) {
     const tbody = document.getElementById('dashboardTableBody');
     if(!tbody) {
         console.error('Table body element not found!');
@@ -2232,433 +2299,431 @@ ${highRisk.join('\n')}
     });
 }
 
-        // Filter Function
-        window.applyFilter = function() {
-            const searchName = document.getElementById('searchName').value.toLowerCase();
-            const filterRisk = document.getElementById('filterRisk').value;
-            const filterEvaluator = document.getElementById('filterEvaluator').value;
-            const filterSubdistrict = document.getElementById('filterSubdistrict').value.toLowerCase();
-            const filterDate = document.getElementById('filterDate').value;
-            
-            filteredCases = allCases.filter(item => {
-                let match = true;
-                
-                if(searchName && (!item.ChildName || !String(item.ChildName).toLowerCase().includes(searchName))) {
-                    match = false;
-                }
-                
-                if(filterRisk && (!item.AssessmentResult || !String(item.AssessmentResult).includes(filterRisk))) {
-                    match = false;
-                }
-                
-                if(filterEvaluator && String(item.EvaluatorType) !== filterEvaluator) {
-                    match = false;
-                }
-                
-                if(filterSubdistrict && (!item.SubDistrict || !String(item.SubDistrict).toLowerCase().includes(filterSubdistrict))) {
-                    match = false;
-                }
-                
-                if(filterDate) {
-                    const itemDate = new Date(item.Timestamp).toISOString().split('T')[0];
-                    if(itemDate !== filterDate) {
-                        match = false;
-                    }
-                }
-                
-                return match;
-            });
-            
-            updateStats(filteredCases);
-            renderTable(filteredCases);
+// Filter Function
+window.applyFilter = function() {
+    const searchName = document.getElementById('searchName').value.toLowerCase();
+    const filterRisk = document.getElementById('filterRisk').value;
+    const filterEvaluator = document.getElementById('filterEvaluator').value;
+    const filterSubdistrict = document.getElementById('filterSubdistrict').value.toLowerCase();
+    const filterDate = document.getElementById('filterDate').value;
+    
+    filteredCases = allCases.filter(item => {
+        let match = true;
+        
+        if(searchName && (!item.ChildName || !String(item.ChildName).toLowerCase().includes(searchName))) {
+            match = false;
         }
+        
+        if(filterRisk && (!item.AssessmentResult || !String(item.AssessmentResult).includes(filterRisk))) {
+            match = false;
+        }
+        
+        if(filterEvaluator && String(item.EvaluatorType) !== filterEvaluator) {
+            match = false;
+        }
+        
+        if(filterSubdistrict && (!item.SubDistrict || !String(item.SubDistrict).toLowerCase().includes(filterSubdistrict))) {
+            match = false;
+        }
+        
+        if(filterDate) {
+            const itemDate = new Date(item.Timestamp).toISOString().split('T')[0];
+            if(itemDate !== filterDate) {
+                match = false;
+            }
+        }
+        
+        return match;
+    });
+    
+    updateStats(filteredCases);
+    renderTable(filteredCases);
+}
 
-        // Show History
-        window.showHistory = function(childName) {
-            const childCases = allCases.filter(c => c.ChildName === childName);
+// Show History
+window.showHistory = function(childName) {
+    const childCases = allCases.filter(c => c.ChildName === childName);
+    
+    if(childCases.length === 0) return;
+    
+    const latestCase = childCases[childCases.length - 1];
+    
+    document.getElementById('historyChildName').innerText = childName;
+    
+    // Contact info - handle null/undefined safely
+    const contactInfo = [];
+    if(latestCase.EvaluatorPhone && String(latestCase.EvaluatorPhone).trim()) {
+        contactInfo.push(`📞 ${latestCase.EvaluatorPhone}`);
+    }
+    if(latestCase.LineID && String(latestCase.LineID).trim()) {
+        contactInfo.push(`💬 Line: ${latestCase.LineID}`);
+    }
+    if(latestCase.Email && String(latestCase.Email).trim()) {
+        contactInfo.push(`📧 ${latestCase.Email}`);
+    }
+    
+    document.getElementById('historyChildInfo').innerHTML = 
+        `อายุ ${latestCase.ChildAge} ปี | ประวัติการประเมินทั้งหมด ${childCases.length} ครั้ง<br>` +
+        (contactInfo.length > 0 ? `<small class="text-muted">${contactInfo.join(' | ')}</small>` : '<small class="text-muted">ไม่มีข้อมูลติดต่อ</small>');
+    
+    const timeline = document.getElementById('historyTimeline');
+    timeline.innerHTML = '';
+    
+    childCases.reverse().forEach((item, idx) => {
+        const date = new Date(item.Timestamp).toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        const div = document.createElement('div');
+        div.className = 'timeline-item';
+        
+        // Clean AI advice - remove markdown code blocks
+        let aiAdvice = item.AIAdvice || 'ไม่มีข้อมูล';
+        aiAdvice = aiAdvice.replace(/```html/g, '').replace(/```/g, '').trim();
+        
+        div.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h6 class="mb-0 fw-bold">ครั้งที่ ${childCases.length - idx}</h6>
+                <small class="text-muted">${date}</small>
+            </div>
+            <p class="mb-2">
+                <strong>ผู้ประเมิน:</strong> ${item.EvaluatorName} (${item.EvaluatorType})
+            </p>
             
-            if(childCases.length === 0) return;
+            ${item.Diagnosis && String(item.Diagnosis).trim() ? `
+                <div class="alert alert-info py-2 mb-2" style="border-radius: 10px;">
+                    <small>
+                        <i class="fas fa-stethoscope me-1"></i><strong>การวินิจฉัย:</strong> ${item.Diagnosis}
+                    </small>
+                </div>
+            ` : ''}
             
-            const latestCase = childCases[childCases.length - 1];
+            ${item.Medication && String(item.Medication).trim() ? `
+                <div class="alert alert-success py-2 mb-2" style="border-radius: 10px;">
+                    <small>
+                        <i class="fas fa-pills me-1"></i><strong>ยาที่จ่าย:</strong> ${item.Medication}
+                        ${item.MedicationDate ? `
+                            <br><i class="fas fa-calendar me-1"></i>วันที่จ่าย: ${new Date(item.MedicationDate).toLocaleDateString('th-TH')}
+                        ` : ''}
+                    </small>
+                </div>
+            ` : ''}
             
-            document.getElementById('historyChildName').innerText = childName;
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <small class="text-muted">ขาดสมาธิ:</small><br>
+                    <span class="badge bg-primary">${item.Score_Inattention || 0}/27</span>
+                </div>
+                <div class="col-4">
+                    <small class="text-muted">ซน/หุนหัน:</small><br>
+                    <span class="badge bg-info">${item.Score_Hyperactivity || 0}/27</span>
+                </div>
+                <div class="col-4">
+                    <small class="text-muted">ดื้อ/ต่อต้าน:</small><br>
+                    <span class="badge bg-warning">${item.Score_Oppositional || 0}/24</span>
+                </div>
+            </div>
             
-            // Contact info - handle null/undefined safely
-            const contactInfo = [];
-            if(latestCase.EvaluatorPhone && String(latestCase.EvaluatorPhone).trim()) {
-                contactInfo.push(`📞 ${latestCase.EvaluatorPhone}`);
-            }
-            if(latestCase.LineID && String(latestCase.LineID).trim()) {
-                contactInfo.push(`💬 Line: ${latestCase.LineID}`);
-            }
-            if(latestCase.Email && String(latestCase.Email).trim()) {
-                contactInfo.push(`📧 ${latestCase.Email}`);
-            }
+            <div class="mb-2">
+                <span class="badge ${item.AssessmentResult.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'}">
+                    ${item.AssessmentResult}
+                </span>
+            </div>
             
-            document.getElementById('historyChildInfo').innerHTML = 
-                `อายุ ${latestCase.ChildAge} ปี | ประวัติการประเมินทั้งหมด ${childCases.length} ครั้ง<br>` +
-                (contactInfo.length > 0 ? `<small class="text-muted">${contactInfo.join(' | ')}</small>` : '<small class="text-muted">ไม่มีข้อมูลติดต่อ</small>');
-            
-            const timeline = document.getElementById('historyTimeline');
-            timeline.innerHTML = '';
-            
-            childCases.reverse().forEach((item, idx) => {
-                const date = new Date(item.Timestamp).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                
-                const div = document.createElement('div');
-                div.className = 'timeline-item';
-                
-                // Clean AI advice - remove markdown code blocks
-                let aiAdvice = item.AIAdvice || 'ไม่มีข้อมูล';
-                aiAdvice = aiAdvice.replace(/```html/g, '').replace(/```/g, '').trim();
-                
-                div.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="mb-0 fw-bold">ครั้งที่ ${childCases.length - idx}</h6>
-                        <small class="text-muted">${date}</small>
+            ${aiAdvice !== 'ไม่มีข้อมูล' ? `
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-secondary w-100" type="button" 
+                            data-bs-toggle="collapse" data-bs-target="#aiDetail${idx}">
+                        <i class="fas fa-robot me-1"></i>คำแนะนำจาก AI
+                    </button>
+                    <div class="collapse mt-2" id="aiDetail${idx}">
+                        <div class="card card-body bg-light" style="font-size: 0.85rem;">
+                            ${aiAdvice}
+                        </div>
                     </div>
-                    <p class="mb-2">
-                        <strong>ผู้ประเมิน:</strong> ${item.EvaluatorName} (${item.EvaluatorType})
-                    </p>
-                    
-                    ${item.Diagnosis && String(item.Diagnosis).trim() ? `
-                        <div class="alert alert-info py-2 mb-2" style="border-radius: 10px;">
-                            <small>
-                                <i class="fas fa-stethoscope me-1"></i><strong>การวินิจฉัย:</strong> ${item.Diagnosis}
-                            </small>
-                        </div>
-                    ` : ''}
-                    
-                    ${item.Medication && String(item.Medication).trim() ? `
-                        <div class="alert alert-success py-2 mb-2" style="border-radius: 10px;">
-                            <small>
-                                <i class="fas fa-pills me-1"></i><strong>ยาที่จ่าย:</strong> ${item.Medication}
-                                ${item.MedicationDate ? `
-                                    <br><i class="fas fa-calendar me-1"></i>วันที่จ่าย: ${new Date(item.MedicationDate).toLocaleDateString('th-TH')}
-                                ` : ''}
-                            </small>
-                        </div>
-                    ` : ''}
-                    
-                    <div class="row g-2 mb-3">
-                        <div class="col-4">
-                            <small class="text-muted">ขาดสมาธิ:</small><br>
-                            <span class="badge bg-primary">${item.Score_Inattention || 0}/27</span>
-                        </div>
-                        <div class="col-4">
-                            <small class="text-muted">ซน/หุนหัน:</small><br>
-                            <span class="badge bg-info">${item.Score_Hyperactivity || 0}/27</span>
-                        </div>
-                        <div class="col-4">
-                            <small class="text-muted">ดื้อ/ต่อต้าน:</small><br>
-                            <span class="badge bg-warning">${item.Score_Oppositional || 0}/24</span>
-                        </div>
+                </div>
+            ` : ''}
+            
+            ${item.AppointmentDate ? `
+                <div class="mt-2">
+                    <small class="text-primary">
+                        <i class="fas fa-calendar-check me-1"></i>นัดหมาย: ${new Date(item.AppointmentDate).toLocaleDateString('th-TH')}
+                    </small>
+                </div>
+            ` : ''}
+        `;
+        timeline.appendChild(div);
+    });
+    
+    new bootstrap.Modal(document.getElementById('historyModal')).show();
+}
+
+// Appointment
+window.openAppoint = function(id, name, email, line) {
+    document.getElementById('appCaseId').value = id;
+    document.getElementById('appName').value = name;
+    document.getElementById('appDate').value = '';
+    document.getElementById('appNote').value = '';
+    new bootstrap.Modal(document.getElementById('appointmentModal')).show();
+}
+
+window.saveAppointment = function() {
+    const id = document.getElementById('appCaseId').value;
+    const date = document.getElementById('appDate').value;
+    const note = document.getElementById('appNote').value;
+    
+    if(!date) {
+        alert("กรุณาระบุวันที่นัดหมาย");
+        return;
+    }
+    
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({
+            action: 'save_appointment',
+            id: id,
+            date: date,
+            note: note
+        })
+    })
+    .then(() => {
+        alert("✅ บันทึกนัดหมายสำเร็จ!");
+        bootstrap.Modal.getInstance(document.getElementById('appointmentModal')).hide();
+        loadDashboardData();
+    })
+    .catch(e => {
+        alert("เกิดข้อผิดพลาด: " + e);
+    })
+    .finally(() => {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    });
+}
+
+// Chat - ใช้ Direct API แทน SDK
+window.toggleChat = () => {
+    const w = document.getElementById('chatWindow');
+    w.style.display = w.style.display === 'flex' ? 'none' : 'flex';
+}
+
+window.sendChat = async () => {
+    const inp = document.getElementById('chatMsg');
+    const msg = inp.value.trim();
+    if(!msg) return;
+    
+    const body = document.getElementById('chatBody');
+    body.innerHTML += `<div class="message user">${msg}</div>`;
+    inp.value = '';
+    body.scrollTop = body.scrollHeight;
+    
+    try {
+        const prompt = `คุณคือผู้ช่วย AI ด้านการดูแลเด็กสมาธิสั้น (ADHD) ตอบคำถามของพ่อแม่หรือครูแบบกระชับและเข้าใจง่าย:\n\n${msg}`;
+        const aiText = await callGeminiDirectAPI(prompt);
+        body.innerHTML += `<div class="message ai">${aiText}</div>`;
+        body.scrollTop = body.scrollHeight;
+    } catch(e) {
+        console.error('Chat error:', e);
+        body.innerHTML += `<div class="message ai">ขออภัย เกิดข้อผิดพลาด: ${e.message}<br>กรุณาลองใหม่อีกครั้ง</div>`;
+    }
+}
+
+// Enter to send chat
+document.getElementById('chatMsg').addEventListener('keypress', function(e) {
+    if(e.key === 'Enter') {
+        sendChat();
+    }
+});
+
+// ==================== ฟังก์ชันค้นหาเด็ก ====================
+
+window.searchChildHistory = function() {
+    const searchTerm = document.getElementById('searchChild').value.trim();
+    
+    if(!searchTerm) {
+        alert('กรุณาระบุชื่อหรือเลข CID');
+        return;
+    }
+    
+    if(searchTerm.length < 3) {
+        alert('กรุณาพิมพ์อย่างน้อย 3 ตัวอักษร');
+        return;
+    }
+    
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: 'search_child',
+            searchTerm: searchTerm
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('loadingOverlay').style.display = 'none';
+        
+        if(data.status === 'success' && data.results.length > 0) {
+            displaySearchResults(data.results);
+        } else {
+            alert('ไม่พบข้อมูลเด็กที่ค้นหา');
+            document.getElementById('searchResults').style.display = 'none';
+        }
+    })
+    .catch(e => {
+        console.error('Search error:', e);
+        document.getElementById('loadingOverlay').style.display = 'none';
+        alert('เกิดข้อผิดพลาดในการค้นหา');
+    });
+}
+
+function displaySearchResults(results) {
+    const resultsDiv = document.getElementById('searchResultsList');
+    const container = document.getElementById('searchResults');
+    
+    let html = '<div class="list-group mb-3">';
+    
+    results.forEach((child, index) => {
+        const latestAssessment = child.assessments[child.assessments.length - 1];
+        const assessmentDate = new Date(latestAssessment.date).toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+        
+        html += `
+            <a href="#" class="list-group-item list-group-item-action" 
+               onclick="selectChild(${index}); return false;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1 text-primary">
+                            <i class="fas fa-user me-2"></i>${child.name}
+                        </h6>
+                        <small class="d-block mb-1">
+                            <i class="fas fa-id-card me-1"></i>CID: ${child.cid || 'ไม่มี'} | 
+                            <i class="fas fa-birthday-cake me-1"></i>อายุ: ${child.age} ปี | 
+                            <i class="fas fa-venus-mars me-1"></i>${child.gender}
+                        </small>
+                        <small class="text-muted d-block">
+                            <i class="fas fa-clock me-1"></i>ประเมินล่าสุด: ${assessmentDate}
+                        </small>
+                        ${latestAssessment.result ? `
+                            <span class="badge ${latestAssessment.result.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'} mt-1">
+                                ${latestAssessment.result}
+                            </span>
+                        ` : ''}
                     </div>
-                    
-                    <div class="mb-2">
-                        <span class="badge ${item.AssessmentResult.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'}">
-                            ${item.AssessmentResult}
+                    <div class="text-end">
+                        <span class="badge bg-info" style="font-size: 1rem;">
+                            ${child.totalAssessments} ครั้ง
                         </span>
                     </div>
-                    
-                    ${aiAdvice !== 'ไม่มีข้อมูล' ? `
-                        <div class="mt-3">
-                            <button class="btn btn-sm btn-outline-secondary w-100" type="button" 
-                                    data-bs-toggle="collapse" data-bs-target="#aiDetail${idx}">
-                                <i class="fas fa-robot me-1"></i>คำแนะนำจาก AI
-                            </button>
-                            <div class="collapse mt-2" id="aiDetail${idx}">
-                                <div class="card card-body bg-light" style="font-size: 0.85rem;">
-                                    ${aiAdvice}
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    ${item.AppointmentDate ? `
-                        <div class="mt-2">
-                            <small class="text-primary">
-                                <i class="fas fa-calendar-check me-1"></i>นัดหมาย: ${new Date(item.AppointmentDate).toLocaleDateString('th-TH')}
-                            </small>
-                        </div>
-                    ` : ''}
-                `;
-                timeline.appendChild(div);
-            });
-            
-            new bootstrap.Modal(document.getElementById('historyModal')).show();
-        }
+                </div>
+            </a>
+        `;
+    });
+    
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+    container.style.display = 'block';
+    
+    window.searchResultsData = results;
+}
 
-        // Appointment
-        window.openAppoint = function(id, name, email, line) {
-            document.getElementById('appCaseId').value = id;
-            document.getElementById('appName').value = name;
-            document.getElementById('appDate').value = '';
-            document.getElementById('appNote').value = '';
-            new bootstrap.Modal(document.getElementById('appointmentModal')).show();
-        }
+function selectChild(index) {
+    const child = window.searchResultsData[index];
+    const latestAssessment = child.assessments[child.assessments.length - 1];
+    
+    document.getElementById('childName').value = child.name;
+    document.getElementById('childCID').value = child.cid || '';
+    document.getElementById('childAge').value = child.age;
+    document.getElementById('childGender').value = child.gender;
+    document.getElementById('lineId').value = latestAssessment.lineId || '';
+    document.getElementById('emailContact').value = latestAssessment.email || '';
+    
+    document.getElementById('searchResults').style.display = 'none';
+    document.getElementById('searchChild').value = '';
+    
+    document.getElementById('childName').scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+    });
+    
+    alert(`✅ ข้อมูลของ "${child.name}" ถูกนำมาใส่แล้ว\n\nประวัติการประเมิน: ${child.totalAssessments} ครั้ง\nผลล่าสุด: ${latestAssessment.result || 'ไม่ทราบ'}\n\nกรุณาตรวจสอบข้อมูลและทำการประเมินต่อ`);
+}
 
-        window.saveAppointment = function() {
-            const id = document.getElementById('appCaseId').value;
-            const date = document.getElementById('appDate').value;
-            const note = document.getElementById('appNote').value;
-            
-            if(!date) {
-                alert("กรุณาระบุวันที่นัดหมาย");
-                return;
-            }
-            
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({
-                    action: 'save_appointment',
-                    id: id,
-                    date: date,
-                    note: note
-                })
-            })
-            .then(() => {
-                alert("✅ บันทึกนัดหมายสำเร็จ!");
-                bootstrap.Modal.getInstance(document.getElementById('appointmentModal')).hide();
-                loadDashboardData();
-            })
-            .catch(e => {
-                alert("เกิดข้อผิดพลาด: " + e);
-            })
-            .finally(() => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-            });
-        }
+window.clearSearch = function() {
+    document.getElementById('searchChild').value = '';
+    document.getElementById('searchResults').style.display = 'none';
+    window.searchResultsData = null;
+}
 
-        // Chat
-        window.toggleChat = () => {
-            const w = document.getElementById('chatWindow');
-            w.style.display = w.style.display === 'flex' ? 'none' : 'flex';
-        }
+// ==================== ฟังก์ชันการวินิจฉัยและยา ====================
 
-        window.sendChat = async () => {
-            const inp = document.getElementById('chatMsg');
-            const msg = inp.value.trim();
-            if(!msg) return;
-            
-            const body = document.getElementById('chatBody');
-            body.innerHTML += `<div class="message user">${msg}</div>`;
-            inp.value = '';
-            body.scrollTop = body.scrollHeight;
-            
-            try {
-                const model = getGenAI().getGenerativeModel({ model: "gemini-3-flash-preview" });
-                const prompt = `คุณคือผู้ช่วย AI ด้านการดูแลเด็กสมาธิสั้น (ADHD) ตอบคำถามของพ่อแม่หรือครูแบบกระชับและเข้าใจง่าย:\n\n${msg}`;
-                const res = await model.generateContent(prompt);
-                const aiText = res.response.text();
-                body.innerHTML += `<div class="message ai">${aiText}</div>`;
-                body.scrollTop = body.scrollHeight;
-            } catch(e) {
-                body.innerHTML += `<div class="message ai">ขออภัย เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง</div>`;
-            }
-        }
+window.openDiagnosis = function(recordId, childName, currentDiagnosis, currentMedication, currentMedicationDate) {
+    document.getElementById('diagnosisRecordID').value = recordId;
+    document.getElementById('diagnosisChildName').innerText = childName;
+    
+    document.getElementById('diagnosisInput').value = currentDiagnosis || '';
+    document.getElementById('medicationInput').value = currentMedication || '';
+    document.getElementById('medicationDateInput').value = currentMedicationDate || '';
+    
+    new bootstrap.Modal(document.getElementById('diagnosisModal')).show();
+}
 
-        // Enter to send chat
-        document.getElementById('chatMsg').addEventListener('keypress', function(e) {
-            if(e.key === 'Enter') {
-                sendChat();
-            }
-        });
-// ==================== ฟังก์ชันค้นหาเด็ก ====================
+window.saveDiagnosis = function() {
+    const recordId = document.getElementById('diagnosisRecordID').value;
+    const diagnosis = document.getElementById('diagnosisInput').value.trim();
+    const medication = document.getElementById('medicationInput').value.trim();
+    const medicationDate = document.getElementById('medicationDateInput').value;
+    
+    if(!diagnosis && !medication) {
+        alert('กรุณากรอกข้อมูลการวินิจฉัยหรือยาที่จ่ายอย่างน้อย 1 รายการ');
+        return;
+    }
+    
+    if(medication && !medicationDate) {
+        if(!confirm('คุณไม่ได้ระบุวันที่จ่ายยา ต้องการบันทึกต่อหรือไม่?')) {
+            return;
+        }
+    }
+    
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: 'update_diagnosis',
+            recordId: recordId,
+            diagnosis: diagnosis,
+            medication: medication,
+            medicationDate: medicationDate
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('loadingOverlay').style.display = 'none';
         
-        window.searchChildHistory = function() {
-            const searchTerm = document.getElementById('searchChild').value.trim();
-            
-            if(!searchTerm) {
-                alert('กรุณาระบุชื่อหรือเลข CID');
-                return;
-            }
-            
-            if(searchTerm.length < 3) {
-                alert('กรุณาพิมพ์อย่างน้อย 3 ตัวอักษร');
-                return;
-            }
-            
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'search_child',
-                    searchTerm: searchTerm
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-                
-                if(data.status === 'success' && data.results.length > 0) {
-                    displaySearchResults(data.results);
-                } else {
-                    alert('ไม่พบข้อมูลเด็กที่ค้นหา');
-                    document.getElementById('searchResults').style.display = 'none';
-                }
-            })
-            .catch(e => {
-                console.error('Search error:', e);
-                document.getElementById('loadingOverlay').style.display = 'none';
-                alert('เกิดข้อผิดพลาดในการค้นหา');
-            });
-        }
-
-        function displaySearchResults(results) {
-            const resultsDiv = document.getElementById('searchResultsList');
-            const container = document.getElementById('searchResults');
-            
-            let html = '<div class="list-group mb-3">';
-            
-            results.forEach((child, index) => {
-                const latestAssessment = child.assessments[child.assessments.length - 1];
-                const assessmentDate = new Date(latestAssessment.date).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-                
-                html += `
-                    <a href="#" class="list-group-item list-group-item-action" 
-                       onclick="selectChild(${index}); return false;">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1 text-primary">
-                                    <i class="fas fa-user me-2"></i>${child.name}
-                                </h6>
-                                <small class="d-block mb-1">
-                                    <i class="fas fa-id-card me-1"></i>CID: ${child.cid || 'ไม่มี'} | 
-                                    <i class="fas fa-birthday-cake me-1"></i>อายุ: ${child.age} ปี | 
-                                    <i class="fas fa-venus-mars me-1"></i>${child.gender}
-                                </small>
-                                <small class="text-muted d-block">
-                                    <i class="fas fa-clock me-1"></i>ประเมินล่าสุด: ${assessmentDate}
-                                </small>
-                                ${latestAssessment.result ? `
-                                    <span class="badge ${latestAssessment.result.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'} mt-1">
-                                        ${latestAssessment.result}
-                                    </span>
-                                ` : ''}
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-info" style="font-size: 1rem;">
-                                    ${child.totalAssessments} ครั้ง
-                                </span>
-                            </div>
-                        </div>
-                    </a>
-                `;
-            });
-            
-            html += '</div>';
-            resultsDiv.innerHTML = html;
-            container.style.display = 'block';
-            
-            window.searchResultsData = results;
-        }
-
-        function selectChild(index) {
-            const child = window.searchResultsData[index];
-            const latestAssessment = child.assessments[child.assessments.length - 1];
-            
-            document.getElementById('childName').value = child.name;
-            document.getElementById('childCID').value = child.cid || '';
-            document.getElementById('childAge').value = child.age;
-            document.getElementById('childGender').value = child.gender;
-            document.getElementById('lineId').value = latestAssessment.lineId || '';
-            document.getElementById('emailContact').value = latestAssessment.email || '';
-            
-            document.getElementById('searchResults').style.display = 'none';
-            document.getElementById('searchChild').value = '';
-            
-            document.getElementById('childName').scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
-            });
-            
-            alert(`✅ ข้อมูลของ "${child.name}" ถูกนำมาใส่แล้ว\n\nประวัติการประเมิน: ${child.totalAssessments} ครั้ง\nผลล่าสุด: ${latestAssessment.result || 'ไม่ทราบ'}\n\nกรุณาตรวจสอบข้อมูลและทำการประเมินต่อ`);
-        }
-
-        window.clearSearch = function() {
-            document.getElementById('searchChild').value = '';
-            document.getElementById('searchResults').style.display = 'none';
-            window.searchResultsData = null;
-        }
-
-        // ==================== ฟังก์ชันการวินิจฉัยและยา ====================
-
-        window.openDiagnosis = function(recordId, childName, currentDiagnosis, currentMedication, currentMedicationDate) {
-            document.getElementById('diagnosisRecordID').value = recordId;
-            document.getElementById('diagnosisChildName').innerText = childName;
-            
-            document.getElementById('diagnosisInput').value = currentDiagnosis || '';
-            document.getElementById('medicationInput').value = currentMedication || '';
-            document.getElementById('medicationDateInput').value = currentMedicationDate || '';
-            
-            new bootstrap.Modal(document.getElementById('diagnosisModal')).show();
-        }
-
-        window.saveDiagnosis = function() {
-            const recordId = document.getElementById('diagnosisRecordID').value;
-            const diagnosis = document.getElementById('diagnosisInput').value.trim();
-            const medication = document.getElementById('medicationInput').value.trim();
-            const medicationDate = document.getElementById('medicationDateInput').value;
-            
-            if(!diagnosis && !medication) {
-                alert('กรุณากรอกข้อมูลการวินิจฉัยหรือยาที่จ่ายอย่างน้อย 1 รายการ');
-                return;
-            }
-            
-            if(medication && !medicationDate) {
-                if(!confirm('คุณไม่ได้ระบุวันที่จ่ายยา ต้องการบันทึกต่อหรือไม่?')) {
-                    return;
-                }
-            }
-            
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'update_diagnosis',
-                    recordId: recordId,
-                    diagnosis: diagnosis,
-                    medication: medication,
-                    medicationDate: medicationDate
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('loadingOverlay').style.display = 'none';
-                
-                if(data.status === 'success') {
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('diagnosisModal'));
-                    modal.hide();
-                    alert('✅ บันทึกข้อมูลการวินิจฉัยและยาสำเร็จ');
-                    loadDashboardData();
-                } else {
-                    alert('❌ เกิดข้อผิดพลาด: ' + data.message);
-                }
-            })
-            .catch(e => {
-                console.error('Save diagnosis error:', e);
-                document.getElementById('loadingOverlay').style.display = 'none';
-                alert('เกิดข้อผิดพลาดในการบันทึก');
-            });
-        }
-
-    </script>
+        if(data.status === 'success') {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('diagnosisModal'));
+            modal.hide();
+            alert('✅ บันทึกข้อมูลการวินิจฉัยและยาสำเร็จ');
+            loadDashboardData();
+        } else {
+            alert('❌เกิดข้อผิดพลาด: ' + data.message);
+}
+})
+.catch(e => {
+console.error('Save diagnosis error:', e);
+document.getElementById('loadingOverlay').style.display = 'none';
+alert('เกิดข้อผิดพลาดในการบันทึก');
+});
+}
+</script>
 </body>
 </html>
-
