@@ -738,7 +738,50 @@
                         </div>
                     </div>
                 </div>
-
+<!-- เพิ่มก่อนส่วนข้อมูลเด็ก -->
+<div class="card card-custom mb-4 animate-slide-up">
+    <div class="card-header-custom">
+        <i class="fas fa-search me-2"></i>ค้นหาเด็กที่เคยประเมินแล้ว
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info border-0 mb-3" style="border-radius: 15px;">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>คำแนะนำ:</strong> หากเด็กเคยประเมินแล้ว สามารถค้นหาเพื่อดูประวัติและประเมินซ้ำได้
+            โดยระบบจะนำข้อมูลเดิมมาใส่ให้อัตโนมัติ
+        </div>
+        
+        <div class="row g-3 mb-3">
+            <div class="col-md-8">
+                <label class="form-label">
+                    <i class="fas fa-search text-primary me-1"></i>ค้นหาจากชื่อหรือเลข CID
+                </label>
+                <input type="text" class="form-control form-control-lg" id="searchChild" 
+                       placeholder="พิมพ์ชื่อเด็ก หรือเลข CID (13 หลัก) เพื่อค้นหา...">
+                <small class="text-muted">
+                    <i class="fas fa-lightbulb me-1"></i>สามารถพิมพ์บางส่วนของชื่อได้ เช่น "สม" จะค้นหา "สมชาย", "สมหญิง"
+                </small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <button type="button" class="btn btn-primary btn-lg w-100" onclick="searchChildHistory()">
+                    <i class="fas fa-search me-2"></i>ค้นหา
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="clearSearch()">
+                    <i class="fas fa-times me-1"></i>ล้าง
+                </button>
+            </div>
+        </div>
+        
+        <!-- Search Results -->
+        <div id="searchResults" class="mt-3" style="display:none;">
+            <hr class="my-3">
+            <h6 class="text-primary mb-3">
+                <i class="fas fa-list me-2"></i>ผลการค้นหา
+            </h6>
+            <div id="searchResultsList"></div>
+        </div>
+    </div>
+</div>
                 <!-- ข้อมูลเด็ก -->
                 <div class="card card-custom animate-slide-up">
                     <div class="card-header-custom">
@@ -761,13 +804,23 @@
                                     <option value="หญิง">หญิง</option>
                                 </select>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <label class="form-label">
+                                    <i class="fas fa-id-card text-info me-1"></i>เลขบัตรประชาชน (CID) 13 หลัก
+                                </label>
+                                <input type="text" class="form-control" id="childCID" 
+                                    placeholder="1234567890123" maxlength="13" pattern="[0-9]{13}">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>ใช้สำหรับค้นหาประวัติ (ไม่บังคับ แต่แนะนำ)
+                                </small>
+                            </div>
+                            <div class="col-md-3">
                                 <label class="form-label">
                                     <i class="fab fa-line text-success me-1"></i>Line ID (ผู้ปกครอง)
                                 </label>
                                 <input type="text" class="form-control" id="lineId" placeholder="@example หรือ ID Line">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">
                                     <i class="fas fa-envelope text-primary me-1"></i>Email (สำหรับรับผล/นัดหมาย)
                                 </label>
@@ -779,11 +832,11 @@
                             <i class="fas fa-map-marker-alt me-2"></i>ที่อยู่ปัจจุบัน
                         </h6>
                         <div class="row g-3 mb-3">
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label">บ้านเลขที่ <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="houseNo" placeholder="123" required>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-1">
                                 <label class="form-label">หมู่ที่ <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="village" placeholder="1" required>
                             </div>
@@ -817,48 +870,6 @@
                         <input type="hidden" id="lng">
                     </div>
                 </div>
-
-                <!-- Diagnosis and Medication Section -->
-                <div class="card card-custom mb-4 animate-slide-up">
-                    <div class="card-header-custom">
-                        <i class="fas fa-stethoscope me-2"></i>ข้อมูลการตรวจวินิจฉัยและการรักษา
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-warning border-0 mb-3" style="border-radius: 15px;">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <small><strong>หมายเหตุ:</strong> กรอกเฉพาะกรณีที่มีการวินิจฉัยจากแพทย์และได้รับยาแล้วเท่านั้น</small>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-notes-medical text-primary me-1"></i>การวินิจฉัย
-                                </label>
-                                <textarea class="form-control" id="diagnosis" rows="3" 
-                                          placeholder="ระบุผลการวินิจฉัยจากแพทย์ (ถ้ามี)&#10;เช่น ADHD Combined Type, ADHD Inattentive Type, ADHD Hyperactive-Impulsive Type"></textarea>
-                                <small class="text-muted">ข้อมูลจากแพทย์เท่านั้น</small>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-pills text-success me-1"></i>ยาที่จ่าย
-                                </label>
-                                <textarea class="form-control" id="medication" rows="3" 
-                                          placeholder="ระบุชื่อยาและขนาด (ถ้ามี)&#10;เช่น Methylphenidate 10 mg วันละ 2 ครั้ง&#10;Atomoxetine 25 mg วันละ 1 ครั้ง"></textarea>
-                                <small class="text-muted">ระบุรายละเอียดยาที่ได้รับ</small>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-calendar-alt text-info me-1"></i>วันที่จ่ายยา
-                                </label>
-                                <input type="date" class="form-control" id="medicationDate">
-                                <small class="text-muted">ระบุวันที่เริ่มได้รับยา</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- คำแนะนำการประเมิน -->
                 <div class="alert alert-info border-0 shadow-sm animate-slide-up" style="border-radius: 20px;">
                     <div class="d-flex align-items-center">
@@ -900,7 +911,7 @@
                 <div class="d-grid gap-2 mt-4">
                     <button type="submit" class="btn btn-custom btn-lg text-white" 
                             style="background: linear-gradient(135deg, var(--primary-pink), var(--dark-pink));">
-                        <i class="fas fa-paper-plane me-2"></i>ประมวลผลและส่งข้อมูล
+                        <i class="fas fa-paper-plane me-2"></i>ประมวลผลด้วย AI และส่งข้อมูลเพื่อบันทึก
                     </button>
                 </div>
             </form>
@@ -1065,11 +1076,14 @@
                                 <thead>
                                     <tr>
                                         <th><i class="fas fa-calendar me-1"></i>วันที่</th>
-                                        <th><i class="fas fa-user me-1"></i>ชื่อเด็ก</th>
+                                        <th><i class="fas fa-user me-1"></i>ชื่อเด็ก (CID)</th>
                                         <th><i class="fas fa-user-tie me-1"></i>ผู้ประเมิน</th>
                                         <th><i class="fas fa-chart-bar me-1"></i>ผลประเมิน</th>
+                                        <th><i class="fas fa-stethoscope me-1"></i>การวินิจฉัย</th>
+                                        <th><i class="fas fa-pills me-1"></i>ยาที่จ่าย</th>
                                         <th><i class="fas fa-redo me-1"></i>จำนวนครั้ง</th>
-                                        <th><i class="fas fa-calendar-alt me-1"></i>นัดหมายล่าสุด</th>
+                                        <th><i class="fas fa-calendar-alt me-1"></i>นัดหมาย</th>
+                                        <th><i class="fas fa-map me-1"></i>แผนที่</th>
                                         <th><i class="fas fa-cog me-1"></i>จัดการ</th>
                                     </tr>
                                 </thead>
@@ -1311,7 +1325,71 @@
             </button>
         </div>
     </div>
+    <!-- เพิ่ม Modal สำหรับบันทึกการวินิจฉัยและยา (ใส่ก่อน </body>) -->
 
+<!-- Diagnosis & Medication Modal -->
+<div class="modal fade" id="diagnosisModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="border-radius: 20px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 20px 20px 0 0;">
+                <h5 class="modal-title">
+                    <i class="fas fa-stethoscope me-2"></i>บันทึกการวินิจฉัยและการรักษา
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="diagnosisRecordID">
+                
+                <div class="alert alert-light border mb-4" style="border-radius: 15px;">
+                    <h6 class="mb-1">
+                        <i class="fas fa-user-circle me-2 text-primary"></i>ชื่อเด็ก
+                    </h6>
+                    <p class="mb-0 fw-bold fs-5" id="diagnosisChildName"></p>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-notes-medical text-primary me-2"></i>การวินิจฉัย
+                    </label>
+                    <textarea class="form-control" id="diagnosisInput" rows="4" 
+                              placeholder="ระบุผลการวินิจฉัยจากแพทย์&#10;&#10;ตัวอย่าง:&#10;- ADHD Combined Type&#10;- ADHD Inattentive Type&#10;- ADHD Hyperactive-Impulsive Type"></textarea>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>ข้อมูลจากแพทย์เท่านั้น
+                    </small>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-pills text-success me-2"></i>ยาที่จ่าย
+                    </label>
+                    <textarea class="form-control" id="medicationInput" rows="4" 
+                              placeholder="ระบุชื่อยาและขนาด&#10;&#10;ตัวอย่าง:&#10;- Methylphenidate 10 mg วันละ 2 ครั้ง (เช้า-กลางวัน)&#10;- Atomoxetine 25 mg วันละ 1 ครั้ง (เช้า)&#10;- Concerta 18 mg วันละ 1 ครั้ง (เช้า)"></textarea>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>ระบุรายละเอียดยาที่ได้รับ
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-calendar-alt text-info me-2"></i>วันที่จ่ายยา
+                    </label>
+                    <input type="date" class="form-control form-control-lg" id="medicationDateInput">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>ระบุวันที่เริ่มได้รับยา
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>ยกเลิก
+                </button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" onclick="saveDiagnosis()">
+                    <i class="fas fa-save me-2"></i>บันทึก
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1xmTQ_hd4n-FPyqIiUqPhAElgMRdYfUo&libraries=places&callback=initMap"></script>
@@ -2009,148 +2087,150 @@ ${highRisk.join('\n')}
         }
 
         function renderTable(data) {
-            const tbody = document.getElementById('dashboardTableBody');
-            if(!tbody) {
-                console.error('Table body element not found!');
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            
-            console.log('Rendering table with data:', data.length, 'items');
-            
-            if(data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5">ไม่พบข้อมูล</td></tr>';
-                return;
-            }
-            
-            // Debug: Check first item structure
-            if(data.length > 0) {
-                console.log('Sample data keys:', Object.keys(data[0]));
-                console.log('Sample Diagnosis:', data[0].Diagnosis);
-                console.log('Sample Medication:', data[0].Medication);
-            }
-            
-            // Group by child name to count assessments
-            const childGroups = {};
-            data.forEach(item => {
-                const name = item.ChildName;
-                if(!childGroups[name]) {
-                    childGroups[name] = [];
-                }
-                childGroups[name].push(item);
-            });
-            
-            console.log('Grouped into', Object.keys(childGroups).length, 'unique children');
-            
-            // Render unique children with their latest assessment
-            Object.keys(childGroups).forEach(childName => {
-                const assessments = childGroups[childName];
-                const latest = assessments[assessments.length - 1]; // Latest assessment
-                const count = assessments.length;
-                
-                const date = new Date(latest.Timestamp).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-                
-                // Check contact info - handle null/undefined safely
-                const hasLine = latest.LineID && String(latest.LineID).trim() !== '';
-                const hasEmail = latest.Email && String(latest.Email).trim() !== '';
-                const hasPhone = latest.EvaluatorPhone && String(latest.EvaluatorPhone).trim() !== '';
-                
-                const contactBadges = [];
-                if(hasPhone) contactBadges.push('<i class="fas fa-phone text-success" title="มีเบอร์โทร"></i>');
-                if(hasLine) contactBadges.push('<i class="fab fa-line text-success" title="มี Line"></i>');
-                if(hasEmail) contactBadges.push('<i class="fas fa-envelope text-success" title="มี Email"></i>');
-                
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${date}</td>
-                    <td>
-                        <strong>${latest.ChildName}</strong><br>
-                        <small class="text-muted">อายุ ${latest.ChildAge} ปี</small><br>
-                        ${contactBadges.length > 0 ? `<small>${contactBadges.join(' ')}</small>` : '<small class="text-muted">ไม่มีข้อมูลติดต่อ</small>'}
-                    </td>
-                    <td>
-                        ${latest.EvaluatorName}<br>
-                        <span class="badge bg-secondary">${latest.EvaluatorType}</span>
-                    </td>
-                    <td>
-                        <span class="badge badge-custom ${latest.AssessmentResult.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'}">
-                            ${latest.AssessmentResult}
-                        </span>
-                        ${latest.Diagnosis && String(latest.Diagnosis).trim() ? `
-                            <br><small class="text-primary mt-1 d-block">
-                                <i class="fas fa-stethoscope me-1"></i>วินิจฉัย: ${latest.Diagnosis}
-                            </small>
-                        ` : ''}
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary rounded-pill" onclick='showHistory(${JSON.stringify(childName)})'>
-                            <i class="fas fa-history me-1"></i>${count} ครั้ง
-                        </button>
-                    </td>
-                    <td>
-                        ${latest.AppointmentDate ? new Date(latest.AppointmentDate).toLocaleDateString('th-TH') : 
-                          '<span class="text-muted">ยังไม่มี</span>'}
-                    </td>
-                    <td>
-                        <div class="d-flex flex-column gap-1" style="font-size: 0.85rem;">
-                            ${hasEmail ? `
-                                <div>
-                                    <i class="fas fa-envelope text-primary me-1"></i>
-                                    <a href="mailto:${latest.Email}" class="text-decoration-none">
-                                        ${latest.Email}
-                                    </a>
-                                </div>
-                            ` : '<small class="text-muted"><i class="fas fa-envelope me-1"></i>ไม่มี Email</small>'}
-                            
-                            ${hasPhone ? `
-                                <div>
-                                    <i class="fas fa-phone text-success me-1"></i>
-                                    <a href="tel:${latest.EvaluatorPhone}" class="text-decoration-none">
-                                        ${latest.EvaluatorPhone}
-                                    </a>
-                                </div>
-                            ` : '<small class="text-muted"><i class="fas fa-phone me-1"></i>ไม่มีเบอร์โทร</small>'}
-                            
-                            ${hasLine ? `
-                                <div>
-                                    <i class="fab fa-line text-success me-1"></i>
-                                    <span class="text-dark">${latest.LineID}</span>
-                                </div>
-                            ` : '<small class="text-muted"><i class="fab fa-line me-1"></i>ไม่มี Line ID</small>'}
-                            
-                            ${latest.Medication && String(latest.Medication).trim() ? `
-                                <div class="mt-2 p-2 bg-light rounded">
-                                    <small class="text-success fw-bold">
-                                        <i class="fas fa-pills me-1"></i>ยา: ${latest.Medication}
-                                    </small>
-                                    ${latest.MedicationDate ? `
-                                        <br><small class="text-muted">
-                                            <i class="fas fa-calendar me-1"></i>${new Date(latest.MedicationDate).toLocaleDateString('th-TH')}
-                                        </small>
-                                    ` : ''}
-                                </div>
-                            ` : ''}
-                            
-                            <div class="mt-2">
-                                <button class="btn btn-sm btn-outline-primary" 
-                                        onclick='openAppoint("${latest.ID}", "${latest.ChildName}", "${latest.Email || ''}", "${latest.LineID || ''}")' 
-                                        title="นัดหมาย">
-                                    <i class="fas fa-calendar-plus me-1"></i>นัดหมาย
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-            
-            console.log('Table rendered successfully');
+    const tbody = document.getElementById('dashboardTableBody');
+    if(!tbody) {
+        console.error('Table body element not found!');
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    
+    if(data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-5">ไม่พบข้อมูล</td></tr>';
+        return;
+    }
+    
+    const childGroups = {};
+    data.forEach(item => {
+        const name = item.ChildName;
+        if(!childGroups[name]) {
+            childGroups[name] = [];
         }
+        childGroups[name].push(item);
+    });
+    
+    Object.keys(childGroups).forEach(childName => {
+        const assessments = childGroups[childName];
+        const latest = assessments[assessments.length - 1];
+        const count = assessments.length;
+        
+        const date = new Date(latest.Timestamp).toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+        
+        const hasLine = latest.LineID && String(latest.LineID).trim() !== '';
+        const hasEmail = latest.Email && String(latest.Email).trim() !== '';
+        const hasPhone = latest.EvaluatorPhone && String(latest.EvaluatorPhone).trim() !== '';
+        
+        const escapedDiagnosis = String(latest.Diagnosis || '').replace(/'/g, "\\\\'").replace(/"/g, '&quot;');
+        const escapedMedication = String(latest.Medication || '').replace(/'/g, "\\\\'").replace(/"/g, '&quot;');
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${date}</td>
+            <td>
+                <strong>${latest.ChildName}</strong><br>
+                <small class="text-muted">
+                    <i class="fas fa-id-card me-1"></i>CID: ${latest.ChildCID || 'ไม่มี'}
+                </small>
+            </td>
+            <td>
+                ${latest.EvaluatorName}<br>
+                <span class="badge bg-secondary">${latest.EvaluatorType}</span>
+            </td>
+            <td>
+                <span class="badge ${latest.AssessmentResult.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'}">
+                    ${latest.AssessmentResult}
+                </span>
+            </td>
+            <td>
+                ${latest.Diagnosis && String(latest.Diagnosis).trim() ? `
+                    <small class="text-primary d-block mb-1">
+                        <i class="fas fa-check-circle me-1"></i>${latest.Diagnosis}
+                    </small>
+                    <button class="btn btn-sm btn-outline-secondary" 
+                            onclick='openDiagnosis("${latest.ID}", "${latest.ChildName}", "${escapedDiagnosis}", "${escapedMedication}", "${latest.MedicationDate || ''}")'>
+                        <i class="fas fa-edit me-1"></i>แก้ไข
+                    </button>
+                ` : `
+                    <button class="btn btn-sm btn-outline-primary rounded-pill" 
+                            onclick='openDiagnosis("${latest.ID}", "${latest.ChildName}", "", "", "")'>
+                        <i class="fas fa-plus me-1"></i>บันทึก
+                    </button>
+                `}
+            </td>
+            <td>
+                ${latest.Medication && String(latest.Medication).trim() ? `
+                    <small class="text-success d-block mb-1">
+                        <i class="fas fa-pills me-1"></i>${latest.Medication}
+                    </small>
+                    ${latest.MedicationDate ? `
+                        <small class="text-muted d-block mb-1">
+                            <i class="fas fa-calendar me-1"></i>${new Date(latest.MedicationDate).toLocaleDateString('th-TH')}
+                        </small>
+                    ` : ''}
+                    <button class="btn btn-sm btn-outline-secondary" 
+                            onclick='openDiagnosis("${latest.ID}", "${latest.ChildName}", "${escapedDiagnosis}", "${escapedMedication}", "${latest.MedicationDate || ''}")'>
+                        <i class="fas fa-edit me-1"></i>แก้ไข
+                    </button>
+                ` : `<small class="text-muted">ยังไม่มี</small>`}
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary rounded-pill" 
+                        onclick='showHistory(${JSON.stringify(childName)})'>
+                    <i class="fas fa-history me-1"></i>${count} ครั้ง
+                </button>
+            </td>
+            <td>
+                ${latest.AppointmentDate ? 
+                  new Date(latest.AppointmentDate).toLocaleDateString('th-TH') : 
+                  '<span class="text-muted">ยังไม่มี</span>'}
+            </td>
+            <td>
+                ${latest.MapLat && latest.MapLng ? `
+                    <a href="https://www.google.com/maps?q=${latest.MapLat},${latest.MapLng}" 
+                       target="_blank" class="btn btn-sm btn-success rounded-pill">
+                        <i class="fas fa-map-marked-alt"></i>
+                    </a>
+                ` : '<small class="text-muted">ไม่มี</small>'}
+            </td>
+            <td>
+                <div class="d-flex flex-column gap-1" style="font-size: 0.85rem;">
+                    ${hasEmail ? `
+                        <div>
+                            <i class="fas fa-envelope text-primary me-1"></i>
+                            <a href="mailto:${latest.Email}">${latest.Email}</a>
+                        </div>
+                    ` : '<small class="text-muted"><i class="fas fa-envelope me-1"></i>ไม่มี</small>'}
+                    
+                    ${hasPhone ? `
+                        <div>
+                            <i class="fas fa-phone text-success me-1"></i>
+                            <a href="tel:${latest.EvaluatorPhone}">${latest.EvaluatorPhone}</a>
+                        </div>
+                    ` : '<small class="text-muted"><i class="fas fa-phone me-1"></i>ไม่มี</small>'}
+                    
+                    ${hasLine ? `
+                        <div>
+                            <i class="fab fa-line text-success me-1"></i>
+                            ${latest.LineID}
+                        </div>
+                    ` : '<small class="text-muted"><i class="fab fa-line me-1"></i>ไม่มี</small>'}
+                    
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-primary w-100" 
+                                onclick='openAppoint("${latest.ID}", "${latest.ChildName}", "${latest.Email || ''}", "${latest.LineID || ''}")'>
+                            <i class="fas fa-calendar-plus me-1"></i>นัดหมาย
+                        </button>
+                    </div>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
 
         // Filter Function
         window.applyFilter = function() {
@@ -2393,6 +2473,190 @@ ${highRisk.join('\n')}
                 sendChat();
             }
         });
+// ==================== ฟังก์ชันค้นหาเด็ก ====================
+        
+        window.searchChildHistory = function() {
+            const searchTerm = document.getElementById('searchChild').value.trim();
+            
+            if(!searchTerm) {
+                alert('กรุณาระบุชื่อหรือเลข CID');
+                return;
+            }
+            
+            if(searchTerm.length < 3) {
+                alert('กรุณาพิมพ์อย่างน้อย 3 ตัวอักษร');
+                return;
+            }
+            
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            
+            fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'search_child',
+                    searchTerm: searchTerm
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                
+                if(data.status === 'success' && data.results.length > 0) {
+                    displaySearchResults(data.results);
+                } else {
+                    alert('ไม่พบข้อมูลเด็กที่ค้นหา');
+                    document.getElementById('searchResults').style.display = 'none';
+                }
+            })
+            .catch(e => {
+                console.error('Search error:', e);
+                document.getElementById('loadingOverlay').style.display = 'none';
+                alert('เกิดข้อผิดพลาดในการค้นหา');
+            });
+        }
+
+        function displaySearchResults(results) {
+            const resultsDiv = document.getElementById('searchResultsList');
+            const container = document.getElementById('searchResults');
+            
+            let html = '<div class="list-group mb-3">';
+            
+            results.forEach((child, index) => {
+                const latestAssessment = child.assessments[child.assessments.length - 1];
+                const assessmentDate = new Date(latestAssessment.date).toLocaleDateString('th-TH', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+                
+                html += `
+                    <a href="#" class="list-group-item list-group-item-action" 
+                       onclick="selectChild(${index}); return false;">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1 text-primary">
+                                    <i class="fas fa-user me-2"></i>${child.name}
+                                </h6>
+                                <small class="d-block mb-1">
+                                    <i class="fas fa-id-card me-1"></i>CID: ${child.cid || 'ไม่มี'} | 
+                                    <i class="fas fa-birthday-cake me-1"></i>อายุ: ${child.age} ปี | 
+                                    <i class="fas fa-venus-mars me-1"></i>${child.gender}
+                                </small>
+                                <small class="text-muted d-block">
+                                    <i class="fas fa-clock me-1"></i>ประเมินล่าสุด: ${assessmentDate}
+                                </small>
+                                ${latestAssessment.result ? `
+                                    <span class="badge ${latestAssessment.result.includes('เสี่ยง') ? 'bg-danger' : 'bg-success'} mt-1">
+                                        ${latestAssessment.result}
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-info" style="font-size: 1rem;">
+                                    ${child.totalAssessments} ครั้ง
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                `;
+            });
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+            container.style.display = 'block';
+            
+            window.searchResultsData = results;
+        }
+
+        function selectChild(index) {
+            const child = window.searchResultsData[index];
+            const latestAssessment = child.assessments[child.assessments.length - 1];
+            
+            document.getElementById('childName').value = child.name;
+            document.getElementById('childCID').value = child.cid || '';
+            document.getElementById('childAge').value = child.age;
+            document.getElementById('childGender').value = child.gender;
+            document.getElementById('lineId').value = latestAssessment.lineId || '';
+            document.getElementById('emailContact').value = latestAssessment.email || '';
+            
+            document.getElementById('searchResults').style.display = 'none';
+            document.getElementById('searchChild').value = '';
+            
+            document.getElementById('childName').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+            
+            alert(`✅ ข้อมูลของ "${child.name}" ถูกนำมาใส่แล้ว\n\nประวัติการประเมิน: ${child.totalAssessments} ครั้ง\nผลล่าสุด: ${latestAssessment.result || 'ไม่ทราบ'}\n\nกรุณาตรวจสอบข้อมูลและทำการประเมินต่อ`);
+        }
+
+        window.clearSearch = function() {
+            document.getElementById('searchChild').value = '';
+            document.getElementById('searchResults').style.display = 'none';
+            window.searchResultsData = null;
+        }
+
+        // ==================== ฟังก์ชันการวินิจฉัยและยา ====================
+
+        window.openDiagnosis = function(recordId, childName, currentDiagnosis, currentMedication, currentMedicationDate) {
+            document.getElementById('diagnosisRecordID').value = recordId;
+            document.getElementById('diagnosisChildName').innerText = childName;
+            
+            document.getElementById('diagnosisInput').value = currentDiagnosis || '';
+            document.getElementById('medicationInput').value = currentMedication || '';
+            document.getElementById('medicationDateInput').value = currentMedicationDate || '';
+            
+            new bootstrap.Modal(document.getElementById('diagnosisModal')).show();
+        }
+
+        window.saveDiagnosis = function() {
+            const recordId = document.getElementById('diagnosisRecordID').value;
+            const diagnosis = document.getElementById('diagnosisInput').value.trim();
+            const medication = document.getElementById('medicationInput').value.trim();
+            const medicationDate = document.getElementById('medicationDateInput').value;
+            
+            if(!diagnosis && !medication) {
+                alert('กรุณากรอกข้อมูลการวินิจฉัยหรือยาที่จ่ายอย่างน้อย 1 รายการ');
+                return;
+            }
+            
+            if(medication && !medicationDate) {
+                if(!confirm('คุณไม่ได้ระบุวันที่จ่ายยา ต้องการบันทึกต่อหรือไม่?')) {
+                    return;
+                }
+            }
+            
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            
+            fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'update_diagnosis',
+                    recordId: recordId,
+                    diagnosis: diagnosis,
+                    medication: medication,
+                    medicationDate: medicationDate
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                
+                if(data.status === 'success') {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('diagnosisModal'));
+                    modal.hide();
+                    alert('✅ บันทึกข้อมูลการวินิจฉัยและยาสำเร็จ');
+                    loadDashboardData();
+                } else {
+                    alert('❌ เกิดข้อผิดพลาด: ' + data.message);
+                }
+            })
+            .catch(e => {
+                console.error('Save diagnosis error:', e);
+                document.getElementById('loadingOverlay').style.display = 'none';
+                alert('เกิดข้อผิดพลาดในการบันทึก');
+            });
+        }
 
     </script>
 </body>
