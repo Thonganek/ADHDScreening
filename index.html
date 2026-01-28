@@ -1583,7 +1583,7 @@
             
             try {
                 const genAI = getGenAI();
-                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+                const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
                 
                 const prompt = `วิเคราะห์ผลการประเมิน SNAP-IV สำหรับเด็กชื่อ ${document.getElementById('childName').value} อายุ ${document.getElementById('childAge').value} ปี
                 
@@ -2456,7 +2456,7 @@ ${highRisk.join('\n')}
             body.scrollTop = body.scrollHeight;
             
             try {
-                const model = getGenAI().getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+                const model = getGenAI().getGenerativeModel({ model: "gemini-3-flash-preview" });
                 const prompt = `คุณคือผู้ช่วย AI ด้านการดูแลเด็กสมาธิสั้น (ADHD) ตอบคำถามของพ่อแม่หรือครูแบบกระชับและเข้าใจง่าย:\n\n${msg}`;
                 const res = await model.generateContent(prompt);
                 const aiText = res.response.text();
@@ -2661,3 +2661,4 @@ ${highRisk.join('\n')}
     </script>
 </body>
 </html>
+
